@@ -33,7 +33,7 @@ class SnapShots:
         self.boxlen=length
 
     def _CalcBoxEdge(self,frame:int)->np.ndarray:
-        xyz=np.squeeze(rec[frame].xyz*10,0)
+        xyz=np.squeeze(self.rec[frame].xyz*10,0)
         box_num=len(self.boxCenterAtomId)
         out=np.zeros((box_num,6))
         for i in range(box_num):
@@ -518,6 +518,9 @@ class ModelGroup:
         self.pa_list:List[PocketsAnalysis]=[]
         self.distance_cutoff=kw.get('disCutoff',3.0)
 
+    def __getitem__(self,id:int)->PocketsAnalysis:
+        return self.pa_list[id]
+
     def SetDistCutoff(self,distance:float):
         self.distance_cutoff=distance
         for pa in self.pa_list:
@@ -721,28 +724,31 @@ class PAHelper:
 def ParserBox(input:List[str])->Tuple[List[List[int]],List[List[float]]]:
     atom_id=[]
     length=[]
-    count=0
     tmp=[]
-    for i in input:
-        if count==4:
-            length.append(tmp)
-            tmp=[]
-            count=0
-        if count==0:
-            tmp=i.split(',')
-            atom_id.append([int(j) for j in tmp])
-            count+=1
-            tmp=[]
-        else:
-            tmp.append(float(i))
-            count+=1
+    for group in input:
+        if len(group)!=2:
+            print('Wrong number of box parameters!')
+            exit()
+        tmp=group[0].split(',')
+        atom_id.append(list(map(int,tmp)))
+        tmp=group[1].split(',')
+        if len(tmp)!=3:
+            print('Wrong number of box length parameters!')
+            exit()
+        length.append(list(map(float,tmp)))
     return (atom_id,length)
 
-def ParserMask(protein:mdtraj.Trajectory,inlist:List[int])->List[int]:
+def ParserMask(protein:mdtraj.Trajectory,instr:str,mode:str='all')->List[int]:
+    inlist=instr.split(',')
+    inlist=list(map(int,inlist))
     resid=[]
     for i in range(0,len(inlist),2):
         resid.extend(list(range(inlist[i]-1,inlist[i+1]-1)))
-    atomid=[atom.index for atom in protein.topology.atoms if atom.residue.index in resid]
+    atomid=[]
+    if mode=='all':
+        atomid=[atom.index for atom in protein.topology.atoms if atom.residue.index in resid]
+    if mode=='bb':
+        atomid=[atom.index for atom in protein.topology.atoms if (atom.residue.index in resid and atom.name in ['CA','C','N'])]
     return atomid
 
 def GetPA(md)->PocketsAnalysis:
@@ -753,28 +759,37 @@ def GetPA(md)->PocketsAnalysis:
     if len(md['traj'])==0:
             print('Traj file not set!')
             exit()
-    for i in md['traj']:
+    traj_list=md['traj'].split(',')
+    for i in traj_list:
+        i=i.strip()
         if not os.path.exists(i):
             print(f'The traj file does not exist! ({i})')
             exit()
-    protein=mdtraj.load(md['traj'],top=args.top)
+    protein=mdtraj.load(md['traj'].split(','),top=md["top"])
     print(f'{"done":>8s}.')
 
     print('Parse  rec/lig mask...',end='')
     lig_mask=[]
     rec_mask=[]
-    if len(md['lig_mask'])!=0:
-        tlist=list(map(int,md['lig_mask']))
-        lig_mask=ParserMask(protein,tlist)
-    if len(md['rec_mask'])!=0:
-        tlist=list(map(int,md['rec_mask']))
-        rec_mask=ParserMask(protein,tlist)
+    if 'lig_mask' in md.keys() and len(md['lig_mask'])!=0:
+        lig_mask=ParserMask(protein,md['lig_mask'])
+    if 'rec_mask' in md.keys() and len(md['rec_mask'])!=0:
+        rec_mask=ParserMask(protein,md['rec_mask'])
     pa=PocketsAnalysis(protein,rec_mask=rec_mask,lig_mask=lig_mask)
     print(f'{"done":>8s}.')
 
-    if len(md['box'])!=0:
+    if 'box' in md.keys() and len(md['box'])!=0:
         print('Parse Box...',end='')
-        atom_id,box_length=ParserBox(md['box'])
+        if type(md['box'])==str:
+            tmp=md['box'].split()
+            if len(tmp)==0 or len(tmp)%2==1:
+                print('Wrong number of box parameters!')
+            box_list=[]
+            for i in range(0,len(tmp),2):
+                box_list.append([tmp[i],tmp[i+1]])
+        else:
+            box_list=md['box']
+        atom_id,box_length=ParserBox(box_list)
         pa.SetBox(atom_id,box_length)
         print(f'{"done":>8s}.\n')
 
@@ -865,7 +880,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument('--version', action='version', version='%(prog)s 1.0')
 parser.add_argument('--top', type=str,metavar='Path_to_your_topology_file',default='',
                     help='This parameter specifies the path to your topology file.')
-parser.add_argument('--traj', type=str,metavar='Path_to_your_traj_file',action='append',default=[],
+parser.add_argument('--traj', type=str,metavar='Path_to_your_traj_file',default='',
                     help='This parameter specifies the path to your trace file.')
 parser.add_argument('--rec_mask',type=int,action='extend',nargs='+',default=[],metavar='rec_id',
                     help='''R|This parameter specifies your receptor protein residue index. 
@@ -875,7 +890,7 @@ If rec_mask is not specified but lig_mask is specified, then rec_mask = total_at
 Format: --rec_mask resn1 resn2 resn3 resn4... 
 Example: If you want to specify residues 1-50, 60 and 70-89 as your receptor protein: "-rec_mask 1 51 60 61 70 90"
 ''')
-parser.add_argument('--lig_mask',type=int,action='extend',nargs='+',default=[],metavar='lig_atom_id',
+parser.add_argument('--lig_mask',type=str,default='',metavar='lig_atom_id',
                     help='This parameter specifies the atomic index of your ligand. The default is null. See "--rec_mask" for parameter format')
 
 parser.add_argument('--box',type=str,action='append',nargs='+',default=[],metavar='x',
@@ -885,8 +900,8 @@ The analysis will be focused within the location boxes, which allows the program
 At the same time, this can speed up the running of the program and reduce the memory requirements.
 NOTE: To accommodate continuous changes in protein conformation, the box centers are set to the coordinates of a single atom or to the geometric centers of several atoms, 
 which allows the box coordinates to be synchronized with the conformational changes of the protein.
-Format: --box atom1_id,atom2_id length(X-axis direction) width(Y-axis direction) height(Z-axis direction)
-Example: --box 372 18 10 22 --box 458,963 14 12 20''')
+Format: --box atom1_id,atom2_id length(X-axis direction),width(Y-axis direction),height(Z-axis direction)
+Example: --box 372 18,10,22 --box 458,963 14,12,20''')
 
 parser.add_argument('--dist_cutoff',type=float,default=3.0,metavar='float, default=3.0',help='Distance cutoff value when clustering subpockets')
 
@@ -927,297 +942,28 @@ if __name__=='__main__':
         config = ConfigParser()
         config.read(args.config)
     else:
-        config={'GENERAL':vars(args),'MODEL1':vars(args)}
+        config={'GENERAL':vars(args),'MODEL0':vars(args)}
         config['GENERAL']['mode']='single'
 
     if config['GENERAL']['mode']=='single':
+        print('single mode')
         pa=GetPA(config['MODEL1'])
         pa.SetDistCutoff(float(config['GENERAL'].get('dist_cutoff','3.0')))
         pa.Analysis(args.frame_start,args.frame_stop,args.frame_offset)
         WriteFiles(pa,config['MODEL1'])
     elif config['GENERAL']['mode']=='multi':
+        print('multi mode')
         models=ModelGroup()
         models.SetDistCutoff(float(config['GENERAL'].get('dist_cutoff','3.0')))
         align_id=[]
+
         for i in range(100):
-            if config.get(f'MODEL{i}','NONE')!='NONE':
+            if f'MODEL{i}' in config:
+                print(config[f'MODEL{i}'])
+                for k,v in config[f'MODEL{i}'].items():
+                    print(f'{k} : {v}')
                 models.AddPA(GetPA(config[f'MODEL{i}']))
-                config['GENERAL'].get('align_mask')
-            
-
-
-    # print('Read traj file...',end='')
-    # if not os.path.exists(args.top):
-    #         print(f'The topology file does not exist! ({args.top})')
-    #         exit()
-    # if len(args.traj)==0:
-    #         print('Traj file not set!')
-    #         exit()
-    # for i in args.traj:
-    #     if not os.path.exists(i):
-    #         print(f'The traj file does not exist! ({i})')
-    #         exit()
-    # protein=mdtraj.load(args.traj,top=args.top)
-    # print(f'{"done":>8s}.')
-
-    # print('Parse  rec/lig mask...',end='')
-    # lig_mask=[]
-    # rec_mask=[]
-    # if len(args.lig_mask)!=0:
-    #     lig_mask=ParserMask(protein,args.lig_mask)
-    # if len(args.rec_mask)!=0:
-    #     rec_mask=ParserMask(protein,args.rec_mask)
-    # pa=PocketsAnalysis(protein,rec_mask=rec_mask,lig_mask=lig_mask)
-    # print(f'{"done":>8s}.')
-
-    # if len(args.box)!=0:
-    #     print('Parse Box...',end='')
-    #     atom_id,box_length=ParserBox(args.box)
-    #     pa.SetBox(atom_id,box_length)
-    #     print(f'{"done":>8s}.\n')
-
-    # print('Start analysis...')
-    # pa.SetDistCutoff(args.dist_cutoff)
-    # pa.Analysis(args.frame_start,args.frame_stop,args.frame_offset)
-
-    # out_dir=args.out
-    # if args.out_best:
-    #     print('Write best conformation...',end='')
-    #     PAHelper.WriteBestFrames(pa,os.path.join(out_dir,'./pock_info/best_conf'),life_time_coutoff=args.rank_lifetime_cutoff,frame_shift=args.frame_start,reserve_num=args.rank_conf_num,is_use_scoring=args.rank_is_score)
-    #     print(f'{"done":>8s}.')
-    # if args.out_pock_info:
-    #     print('Write pocket information...',end='')
-    #     PAHelper.WritePocketInfos(pa,os.path.join(out_dir,'./pock_info/'))
-    #     print(f'{"done":>8s}.')
-    # if args.out_main_best:
-    #     print('Write main group...',end='')
-    #     PAHelper.WriteMainBestFrames(pa,os.path.join(out_dir,'./pock_info/main_group'),life_time_coutoff=10,frame_shift=500)
-    #     print(f'{"done":>8s}.')
-    # if args.out_coex:
-    #     print('Write coexist matrix...',end='')
-    #     PAHelper.WritePocketAccor(pa,os.path.join(out_dir,'./pock_info/'))
-    #     print(f'{"done":>8s}.')
-    # if args.out_corr:
-    #     print('Write correlation matrix...',end='')
-    #     PAHelper.WriteGroupVtime(pa,os.path.join(out_dir,'./pock_info/'))
-    #     print(f'{"done":>8s}.\n')
-
-#%%test
-out_dir='G:/data/sars-cov-2/main_protease/mp_apo_monomer/analysis/alphaspace/'
-rec=mdtraj.load('G:/data/sars-cov-2/main_protease/mp_apo_monomer/analysis/alphaspace/traj.nc',top='G:/data/sars-cov-2/main_protease/mp_apo_monomer/analysis/alphaspace//com_wat_strip.prmtop')
-pa=PocketsAnalysis(rec)
-pa.SetBox([[2126,4357],],[[17,26,30],])
-pa.SetDistCutoff(3.0)
-#%%
-rec=mdtraj.load('G:/data/sars-cov-2/main_protease/mp_ihb_ensitrelvir/analysis/alphaspace/traj.nc',top='G:/data/sars-cov-2/main_protease/mp_ihb_ensitrelvir/analysis/alphaspace/com_wat_strip.prmtop')
-pa=PocketsAnalysis(rec,lig_mask=list(range(9365,9419)))
-pa.SetDistCutoff(3.0)
-#%%
-pa.Analysis(500,2000)
-#pa.Analysis(500,2000)
-pa.pocketsinfo.GetAllLifeTime()
-#%%
-#out_dir='G:/data/sars-cov-2/main_protease/mp_apo_monomer/analysis/alphaspace/'
-out_dir='G:/data/sars-cov-2/main_protease/mp_ihb_ensitrelvir/analysis/alphaspace/'
-PAHelper.WriteBestFrames(pa,os.path.join(out_dir,'./pock_info/rank'),life_time_coutoff=10,frame_shift=500)
-PAHelper.WritePocketInfos(pa,os.path.join(out_dir,'./pock_info/'))
-PAHelper.WriteMainBestFrames(pa,os.path.join(out_dir,'./pock_info/main'),life_time_coutoff=10,frame_shift=500)
-PAHelper.WritePocketAccor(pa,os.path.join(out_dir,'./pock_info/'))
-PAHelper.WriteGroupVtime(pa,os.path.join(out_dir,'./pock_info/'))
-#%%
-PAHelper.WriteBestFrames(pa,'G:/data/sars-cov-2/main_protease/mp_ihb_ensitrelvir/analysis/alphaspace/pock_info/rank',life_time_coutoff=10,frame_shift=500)
-PAHelper.WritePocketInfos(pa,'G:/data/sars-cov-2/main_protease/mp_ihb_ensitrelvir/analysis/alphaspace/pock_info/')
-#%%
-a,b=pa.pocketsinfo.GetAllPocketGroupVTime()
-#%%
-mean_occu=[]
-for i in range(pa.pocketsinfo.GetPocketNum()):
-    mean_occu.append(pa.pocketsinfo.GetMeanOccRatio(i,80))
-
-
-#%%
-m1=pa.pocketsinfo.SyncBTWPockets()
-# %%
-m2=pa.pocketsinfo.PocketAcorrAnalysis()
-# %%
-np.median(pa.pocketsinfo._pocket_volume_v_time_sorted[pa.pocketsinfo._pocket_volume_v_time_sorted>0])
-# %%
-mplt=PlotHalper(figdpi=300,sfigdpi=300,font='Times New Roman',linewidth=1.0)
-params={'xlabel':r'$Volume(Angstorm^3)$','ylabel':'Frequency','title':'','bins':10}
-#%%
-#fig,ax=mplt.Hist(pa.pocketsinfo.GetNoZeroVolVTime(9),params)
-fig,ax=mplt.Hist(pa.pocketsinfo.GetNoZeroNPRVTime(2),params)
-# %%
-fig, ax = plt.subplots(5,8,figsize=(cmToinch(params.get('length',30)),cmToinch(params.get('width',20))))
-row=0
-params={'xlabel':'','ylabel':'','title':'','bins':10}
-for i in range(5):
-    for j in range(8):
-        if i*5+j<62:
-            mplt.test(pa.pocketsinfo.GetNoZeroVolVTime(i*5+j),params,ax,i,j)
-# %%
-syncf='./sync.dat'
-np.savetxt(syncf,m1)
-# %%
-acorf='./accor.dat'
-np.savetxt(acorf,m2)
-# %%
-pnum=pa.pocketsinfo.GetPocketNum()
-out=np.eye(pnum)
-for i in range(pnum):
-    for j in range(i+1,pnum):
-        pivt=(pa.pocketsinfo.GetVolVTime(i)[1::]-pa.pocketsinfo.GetVolVTime(i)[:-1:])/pa.pocketsinfo.GetMaxVol(i)
-        povt=(pa.pocketsinfo.GetVolVTime(j)[1::]-pa.pocketsinfo.GetVolVTime(j)[:-1:])/pa.pocketsinfo.GetMaxVol(j)
-        out[i,j]=out[j,i]=np.sum(pivt*povt)/(np.linalg.norm(pivt)*np.linalg.norm(povt))
-# %%
-np.savetxt('./lifetime.dat',pa.pocketsinfo.GetAllLifeTime())
-# %%
-out=[]
-for i in range(pa.pocketsinfo.GetPocketNum()):
-    out.append(pa.pocketsinfo.GetMeanVol(i))
-np.savetxt('./pmean.dat',np.array(out))
-# %%
-out=[]
-for i in range(pa.pocketsinfo.GetPocketNum()):
-    out.append(pa.pocketsinfo.GetMedianVol(i))
-np.savetxt('./pmedi.dat',np.array(out))
-# %%
-out=[]
-for i in range(pa.pocketsinfo.GetPocketNum()):
-    if pa.pocketsinfo.GetLifeTime(i)>100 and pa.pocketsinfo.GetMeanVol(i)>100:
-        out.append([i,pa.pocketsinfo.GetLifeTime(i) ,pa.pocketsinfo.GetMeanVol(i)])
-np.savetxt('./filter.dat',np.array(out))
-# %% filter pocket
-b1=pa.pocketsinfo.GetBestConf(10)
-b2=pa.pocketsinfo.GetBestConf(10,is_use_scoring=False)
-#pa.pocketsinfo._pockets_score[pa.pocketsinfo.GetPocketComposition(309)]
-# %%
-pa.pocketsinfo.GetAllLifeTime()[pa.pocketsinfo.GetPocketComposition(309)]/1500
-# %%
-c1=[]
-for i in pa.pocketsinfo.GetPocketComposition(309):
-    c1.append(pa.pocketsinfo.GetVol(i,309))
-np.array(c1)
-# %%
-pa.WritePockets(35,'./pock36.pdb')
-# %%
-rec[35].save('./frame36.pdb')
-# %%
-# 1966 10,16,36 -6.249   0.974  -3.577
-# 4208 18,35,22 -3.985  26.228  -9.035
-# 2631 16,37,20 -1.326   3.599   8.870
-# 2126,4357 -4.330   6.812   4.103/-7.095  18.956  -6.917//-5.5,13,-1.5 17,26,30
-#%%
-pk=pa.pocketsinfo
-all_p_info=[]#[id,meanspace,mediaspace,score,,lifetime,liferatio,mnpr,senpr]
-for i in range(pa.pocketsinfo.GetPocketNum()):
-    all_p_info.append([i,pk.GetMeanVol(i),pk.GetMedianVol(i),pk.GetScore(i),pk.GetLifeTime(i),pk.GetLifeTime(i)/1500,pk.GetMeanNPR(i),np.sqrt(pk.GetMSENPR(i))])
-    np.savetxt(f'./pock_info/pock/volvtime-p{i:03d}.dat',pa.pocketsinfo.GetVolVTime(i))
-    np.savetxt(f'./pock_info/pock/nzvolvtime-p{i:03d}.dat',pa.pocketsinfo.GetNoZeroVolVTime(i))
-np.savetxt('./pock_info/all_p_info.dat',np.array(all_p_info))
-# %%
-np.savetxt('./pock_info/rank/best_conform_score.dat',np.array(b1))
-# %%
-np.savetxt('./pock_info/rank/best_conform_space.dat',np.array(b2))
-# %%
-for i in range(len(b1)):
-    pa.WritePockets(b1[i][0],f'./pock_info/rank/pock-r{i}.pdb')
-    rec[500+b1[i][0]].save(f'./pock_info/rank/pro-r{i}.pdb')
-    np.savetxt(f'./pock_info/rank/pcomp-r{i}.pdb',pa.pocketsinfo.GetPocketComposition(int(b1[i][0])))
-# %%
-a=np.load('./pock_info/pock_data/vol_v_time.npy')
-# %%
-pid=119
-b=a[pid]
-b=b[b>0]
-print(b.shape)
-np.median(b)
-#np.savetxt(f'./p{pid}.dat',b)
-# %%
-c=np.load('./pock_info/pock_data/pock_score.npy')
-# %%
-d=np.arange(c.shape[0])
-# %%
-e=np.stack([d,c])
-# %%
-g=f.tolist()
-# %%
-g=sorted(g,key= lambda x:x[1],reverse=True)
-# %%
-np.savetxt('./pocket_rank.dat',np.array(g))
-# %%
-n1=m1[pa.pocketsinfo.GetAllScore()>10]
-# %%
-n1=n1[:,pa.pocketsinfo.GetAllScore()>10]
-# %%
-np.savetxt('./accormatrix1.txt',n1,fmt='%6.3f',delimiter=',')
-# %%
-np.arange(0,64)[pa.pocketsinfo.GetAllScore()>10]
-# %%
-def test(pa:PocketsAnalysis,main_score_cutoff:float=20.0,sub_score_cutoff:float=10.0):
-    out={}
-    for i in range(pa.pocketsinfo.GetFrameNum()):
-        print(f'fram[{i}]    ')
-        main_key,main_score,sub_key,sub_score=pa.pocketsinfo._CalaPocketKey(i,main_score_cutoff,sub_score_cutoff)
-        main_name=pa.pocketsinfo._key2str(main_key)
-        sub_name=pa.pocketsinfo._key2str(sub_key)
-        print(f'main={main_name}, sub={sub_name}\n')
-        if main_name not in out.keys():
-            out[main_name]=[main_name,main_score,{sub_name:[sub_name,sub_score,[i]]}]
-            print(f'out not have {main_name}')
-            print(f'check {i in out[main_name][2][sub_name][2]}')
-            if not i in out[main_name][2][sub_name][2]:
-                print('wrong!!')
-        elif sub_name not in out[main_name][2].keys():
-            out[main_name][2][sub_name]=[sub_name,sub_score,[i]]
-            print(f'out not have {main_name}-{sub_name}')
-            print(f'check {i in out[main_name][2][sub_name][2]}')
-            if not i in out[main_name][2][sub_name][2]:
-                print('wrong!!')
-        else:
-            print(f'append frame {i} to {main_name},{sub_name},olen={len(out[main_name][2][sub_name][2])} ',end='')
-            out[main_name][2][sub_name][2].append(i)
-            print(f'nlen={len(out[main_name][2][sub_name][2])}')
-            print(f'check {i in out[main_name][2][sub_name][2]}')
-            if not i in out[main_name][2][sub_name][2]:
-                print('wrong!!')
-    return out
-#%%
-out=test(pa=pa)
-# %%
-def test2(input:dict,frame:int)->tuple:
-    name=[]
-    size=0
-    main_name=[]
-    for k,v in input.items():
-        size+=len(v[2])
-    out=np.zeros((size,frame))-1
-    main_list=list(input.values())
-    main_list=sorted(main_list,key=lambda x:x[1],reverse=True)
-    count=0
-    for i in main_list[::-1]:
-        count+=len(input[i[0]][2])
-        main_name.append([i[0],count])
-    count=0
-    for i in main_list:
-        sub_list=list(i[2].values())
-        if len(sub_list)>1:
-            sub_list=sorted(sub_list,key=lambda x:x[1],reverse=True)
-        for j in sub_list:
-            name.append(f'{i[0]},{j[0]}')
-            out[count,j[2]]=size-count
-            count+=1
-    return (main_name,name,out)
-# %%
-mn,out2,out3=test2(out,1500)
-# %%
-np.savetxt(os.path.join('G:/data/sars-cov-2/main_protease/mp_ihb_ensitrelvir/analysis/alphaspace/pock_info/rank','Pocket_group_v_time.dat'),out3.transpose(),fmt='%6.3f',delimiter=',')
-# %%
-with open(os.path.join('G:/data/sars-cov-2/main_protease/mp_ihb_ensitrelvir/analysis/alphaspace/pock_info/rank','Pocket_group_name_list.dat'),'w') as f:
-    for i in out2:
-        f.writelines(f'{i}\n')
-# %%
-with open(os.path.join('G:/data/sars-cov-2/main_protease/mp_ihb_ensitrelvir/analysis/alphaspace/pock_info/rank','Pocket_group_mainname_list.dat'),'w') as f:
-    for i in mn:
-        f.writelines(f'{i[0]},{i[1]}\n')
-# %%
+                print(config[f'MODEL{i}'].get('align_mask').strip().split(','))
+                align_id.append(ParserMask(models[i].rec,config[f'MODEL{i}'].get('align_mask').strip(),mode='bb'))
+        models.AlignModel(align_id)  
+          
