@@ -64,19 +64,6 @@ class SnapShots:
                 #print(f'boxedge={self._CalcBoxEdge(i)}')
                 self.sslist[-1].SetBox(self._CalcBoxEdge(i))
             self.sslist[-1].run(receptor=self.rec,frame=i,rec_mask=rec_mask,lig_mask=lig_mask)
-        # indx=list(range(start,stop,offset))
-        # pct=0.1
-        # print(f'0%->',end='')
-        # for i in indx:
-        #     self.sslist.append(al.Snapshot())
-        #     if len(self.boxCenterAtomId)!=0:
-        #         #print(f'boxedge={self._CalcBoxEdge(i)}')
-        #         self.sslist[-1].SetBox(self._CalcBoxEdge(i))
-        #     self.sslist[-1].run(receptor=self.rec,frame=i,rec_mask=rec_mask,lig_mask=lig_mask)
-        #     if len(self.sslist)/len(indx)>pct:
-        #         print(f'{pct*100}%->',end='')
-        #         pct+=0.1
-        # print(f'100%   done\n')
 
     def GetPockComposition(self,frame:int,pid:int)->List[int]:
         return self.sslist[frame]._pocket_alpha_index_list[pid]
@@ -97,7 +84,7 @@ class PocketsInfo:
         self._pocket_nonpolar_v_time:np.ndarray
         self._pocket_occupancy_v_time:np.ndarray
         self._pocket_occupancy_score:np.ndarray
-        self._pocket_composition:Dict[str, list]={}#main_name:[main_name,main_score,dic,frame_list],dic={sub_name:[sub_name,sub_score,[exists frames]]}
+        self._pocket_composition:Dict[str, list]={}#main_name:[main_name,main_score,minor_dic,frame_list],dic={sub_name:[sub_name,sub_score,[exists frames]]}
         self._pocket_composition_v_time:np.ndarray
         self._pocket_main_group_v_time:List[List[int]]=[]
         self._pocket_sub_group_v_time:List[List[int]]=[]
@@ -107,7 +94,7 @@ class PocketsInfo:
         result=[]
         for i in range(self.GetPocketNum()):
             #result.append(self.GetLifeTime(i)*self.GetMedianVol(i)*self.GetVolumeFluctuations(i,80)[3]/self.GetFrameNum()/self.GetMaxVol(i)*100)
-            result.append(self.GetLifeTime(i)*self.GetMedianVol(i)*self.GetVolumeFluctuations(i,80)[3]*(1-np.sqrt(self.GetMSENPR(i)))/self.GetFrameNum())
+            result.append(self.GetLifeTime(i)*self.GetMedianVol(i)*(1-self.GetVolumeFluctuations(i,80)[3])*(1-np.sqrt(self.GetMSENPR(i,80)))/self.GetFrameNum())
         self._pockets_score=np.array(result)
 
     def _CalaPocketKey(self,frame:int,main_score_cutoff:float=20.0,sub_score_cutoff:float=10.0)->Tuple[List[int],float,List[int],float]:
@@ -158,7 +145,7 @@ class PocketsInfo:
         score=self._pockets_score.copy()
         if is_use_scoring==False:
             score=score*0+1
-        out=[]#[[frame index,total vol/score]]
+        out=[]#[[frame index,total vol/score,main group,minor group]]
         for i in range(reserve_num):
             out.append([-1,0])
         for i in frame_list:
@@ -166,12 +153,12 @@ class PocketsInfo:
             tsumvol=0
             for j in range(self.GetPocketNum()):
                 tvol=self._pocket_volume_v_time[j,i]
-                if tvol>0 and self.GetLifeTime(j)>life_time_cutoff and tvol<self.GetPCTLVol(j,percentile):
-                    # if tvol > self.GetPCTLVol(j,percentile):
-                    #     tvol=self.GetPCTLVol(j,percentile)
+                if tvol>0 and self.GetLifeTime(j)>life_time_cutoff:
+                    if tvol > self.GetPCTLVol(j,percentile):
+                        tvol=self.GetPCTLVol(j,percentile)
                     tsumscore+=tvol*score[j]
                     tsumvol+=tvol
-            out.append([i,tsumscore,tsumvol,self.GetMainName(i),self.GetSubName(i)])
+            out.append([i,tsumscore,tsumvol,self.GetMainName(i),self.GetMinorName(i)])
             # for k in range(5):
             #     if tsumscore>out[k][1]:
             #         out.insert(k,[i,tsumscore,tsumvol,self.GetMainName(i),self.GetSubName(i)])
@@ -186,7 +173,7 @@ class PocketsInfo:
         return self._pockets_frequency.shape[0]
 
     def GetPocketComposition(self,frame:int)->np.ndarray:
-        return self._pocket_cluster_splited[frame]
+        return np.unique(self._pocket_cluster_splited[frame])
 
     def GetMainGroup(self,frame:int)->List[int]:
         return self._pocket_main_group_v_time[frame]
@@ -194,14 +181,14 @@ class PocketsInfo:
     def GetMainName(self,frame:int)->str:
         return self._key2str(self.GetMainGroup(frame))
 
-    def GetSubGroup(self,frame:int)->List[int]:
+    def GetMinorGroup(self,frame:int)->List[int]:
         return self._pocket_sub_group_v_time[frame]
     
-    def GetSubName(self,frame:int)->str:
-        return self._key2str(self.GetSubGroup(frame))
+    def GetMinorName(self,frame:int)->str:
+        return self._key2str(self.GetMinorGroup(frame))
     
     def GetGroupName(self,frame:int)->Tuple[List[int],List[int]]:
-        return (self.GetMainGroup(frame),self.GetSubGroup(frame))
+        return (self.GetMainGroup(frame),self.GetMinorGroup(frame))
 
     def GetLifeTime(self,pid:int)->float:
         return self._pockets_frequency[pid]
@@ -248,10 +235,17 @@ class PocketsInfo:
     def GetVolumeFluctuations(self,pid:int,percentage:int)->Tuple[float,float,float,float]:
         tvol=self._pocket_volume_v_time_sorted[pid]
         tvol=tvol[tvol>0]
+        if tvol.shape[0]==0:
+            return (0,0,0,0)
         if tvol.shape[0]==1:
             return (tvol[0],tvol[0],0,0)
-        tmin=np.percentile(tvol,int((100-percentage)/2))
-        tmax=np.percentile(tvol,int((50+percentage/2)))
+        if tvol.shape[0]<10:
+            tmin=tvol[0]
+            tmax=tvol[-1]
+            #return (tvol[0],tvol[0],0,0)
+        else:
+            tmin=np.percentile(tvol,int((100-percentage)/2))
+            tmax=np.percentile(tvol,int((50+percentage/2)))
         return (tmin,tmax,tmax-tmin,(tmax-tmin)/(tvol[-1]-tvol[0]+1e-5))
 
     def GetVolVTime(self,pid:int)->np.ndarray:
@@ -279,14 +273,23 @@ class PocketsInfo:
         tnpr=tnpr[tnpr>0]
         return np.min(tnpr)
 
-    def GetMeanNPR(self,pid:int)->float:
-        tnpr=self._pocket_nonpolar_v_time[pid]
-        tnpr=tnpr[tnpr>0]
-        return np.mean(tnpr)
-    
-    def GetMSENPR(self,pid:int)->float:
-        tnpr=self._pocket_nonpolar_v_time[pid]
-        tnpr=tnpr[tnpr>0]
+    def GetMeanNPR(self,pid:int,percentile:int=100)->float:
+        sort_id=np.argsort(self._pocket_volume_v_time[pid])
+        tnpr=self._pocket_nonpolar_v_time[pid,sort_id]
+        tnpr=tnpr[self._pocket_volume_v_time_sorted[pid]>0]
+        l=tnpr.shape[0]
+        if l<10:
+            return np.mean(tnpr)
+        return np.mean(tnpr[int((100-percentile)/200*l):int(np.round((0.5+percentile/200)*l))])
+        
+    def GetMSENPR(self,pid:int,percentile:int=100)->float:
+        sort_id=np.argsort(self._pocket_volume_v_time[pid])
+        tnpr=self._pocket_nonpolar_v_time[pid,sort_id]
+        tnpr=tnpr[self._pocket_volume_v_time_sorted[pid]>0]
+        l=tnpr.shape[0]
+        if l<10:
+            return np.mean(np.power((tnpr-np.mean(tnpr)),2))
+        tnpr=tnpr[int((100-percentile)/200*l):int(np.round((0.5+percentile/200)*l))]
         return np.mean(np.power((tnpr-np.mean(tnpr)),2))
 
     def GetNPRVTime(self,pid:int)->np.ndarray:#0==nan
@@ -342,7 +345,7 @@ class PocketsInfo:
                 povt=self.GetVolVTime(j)
                 povt[povt>0]=2
                 total_frame=pivt+povt
-                total_frame=total_frame[total_frame>0].shape[0]
+                total_frame=total_frame[total_frame>0].shape[0]+1e-5
                 intersection=pivt*povt
                 intersection=intersection[intersection==4].shape[0]
                 out[i,j]=out[j,i]=intersection/total_frame
@@ -353,23 +356,38 @@ class PocketsInfo:
         out=np.eye(pnum)
         for i in range(pnum):
             for j in range(i+1,pnum):
-                pivt=(self.GetVolVTime(i)[1::]-self.GetVolVTime(i)[:-1:])/self.GetMaxVol(i)
-                povt=(self.GetVolVTime(j)[1::]-self.GetVolVTime(j)[:-1:])/self.GetMaxVol(j)
-                out[i,j]=out[j,i]=np.sum(pivt*povt)/(np.linalg.norm(pivt)*np.linalg.norm(povt))
+                pivt=(self.GetVolVTime(i)[1::]-self.GetVolVTime(i)[:-1:])/(self.GetMaxVol(i)+1e-5)
+                povt=(self.GetVolVTime(j)[1::]-self.GetVolVTime(j)[:-1:])/(self.GetMaxVol(j)+1e-5)
+                out[i,j]=out[j,i]=np.sum(pivt*povt)/(np.linalg.norm(pivt)*np.linalg.norm(povt)+1e-5)
         return out
 
     def GetBestConf(self,reserve_num:int,percentile:int=80,life_time_cutoff:int=10,is_use_scoring:bool=True):
         frame_list=list(range(self.GetFrameNum()))
         return self._GetBestConf(frame_list,reserve_num,percentile,life_time_cutoff,is_use_scoring)
 
+    def GetMainGroupName(self)->List[str]:
+        return list(self._pocket_composition.keys())
+
     def GetMainGroupNum(self)->int:
         return len(self._pocket_composition)
-    
-    def GetSubGroupNum(self,main_name:str)->int:
+
+    def GetMainGroupFrames(self,main_name)->int:
+        return len(self._pocket_composition[main_name][-1])
+
+    def GetMinorGroupName(self,main_name)->List[str]:
+        return list(self._pocket_composition[main_name][2].keys())
+
+    def GetMinorGroupFrames(self,main_name,minor_name)->int:
+        return len(self._pocket_composition[main_name][2][minor_name][-1])
+
+    def GetMinorGroupNum(self,main_name:str)->int:
         out=self._pocket_composition.get(main_name,None)
         if out==None:
             return 0
         return len(out[2])
+
+    def GetMainGroupVTime(self)->List[str]:
+        return list(map(self._key2str,self._pocket_main_group_v_time))
 
     def GetAllPocketGroupVTime(self)->Tuple[list,np.ndarray]:
         name=[]
@@ -396,6 +414,20 @@ class PocketsInfo:
     def GetGroupBestConf(self,main_name:str,sub_name:str,reserve_num:int,percentile:int=80,life_time_cutoff:int=10,is_use_scoring:bool=True):
         return self._GetBestConf(self._pocket_composition[main_name][2][sub_name][2],reserve_num,percentile,life_time_cutoff,is_use_scoring)
 
+    def MainPocketTransProbAnalysis(self,frame_cutoff=0)->Tuple[List[str],np.ndarray]:
+        main_list=list(self._pocket_composition.values())
+        main_list=sorted(main_list,key=lambda x:x[1],reverse=True)#sort by score
+        main_frames_num_list=np.array([len(i[-1]) for i in main_list])
+        main_id=np.argwhere(main_frames_num_list>frame_cutoff)
+        main_list=main_list[main_id]
+        mname_list=[i[0] for i in main_list]
+        out=np.zeros((len(main_list),len(main_list)))
+        m_v_t=self.GetMainGroupVTime()
+        for i in range(len(m_v_t)-1):
+            if m_v_t[i]!=m_v_t[i+1]:
+                out[mname_list.index(m_v_t[i]),mname_list.index(m_v_t[i+1])]+=1
+        return (mname_list,out)
+
 class PocketsAnalysis:
     def __init__(self,rec:mdtraj.Trajectory,rec_mask:List[int]=[],lig_mask:List[int]=[]) -> None:
         self.rec:mdtraj.Trajectory=rec
@@ -417,14 +449,14 @@ class PocketsAnalysis:
         '''
         return frame number
         '''
-        return self.pocketsinfo.GetFrameNum()
+        return len(self.snap_shots.sslist)
     
     def _ClusterPockets(self):
         total_coords=[]
         #Extract pocket coordinates
         for ss in self.snap_shots.sslist:
             total_coords.extend(ss._pocket_xyz)
-        total_coords=np.array(total_coords)
+        total_coords=np.array(total_coords,dtype=np.float16)
         #pocket clustering
         self.pocketsinfo._pockets_cluter_id=fcluster(linkage(total_coords, method='average'), self.distance_cutoff,criterion='distance')
         self.pocketsinfo._pockets_cluter_id-=1
@@ -555,22 +587,32 @@ class ModelGroup:
         for pa in self.pa_list:
             for ss in pa.snap_shots.sslist:
                 total_coords.extend(ss._pocket_xyz)
-        total_coords=np.array(total_coords)
+        total_coords=np.array(total_coords,dtype=np.float32)
         #pocket clustering
         pockets_cluter_id=fcluster(linkage(total_coords, method='average'), self.distance_cutoff,criterion='distance')
         pockets_cluter_id-=1
         system_frame_num=[pa.size() for pa in self.pa_list]
         pockets_cluter_id_list=np.split(pockets_cluter_id,np.cumsum(system_frame_num))
         for i in range(self.size()):
+            #print(f'len={len(pockets_cluter_id_list[i])}')
             self.pa_list[i].pocketsinfo._pockets_cluter_id=pockets_cluter_id_list[i]
 
-    def Analysis(self,start:List[int],end:List[int],offset:List[int])->None:
+    def Analysis(self,step:List[List[int]])->None:
         for i in range(self.size()):
-            self.pa_list[i].snap_shots.Process(start[i],end[i],offset[i])
+            print(f'processing snap shots of MODEL{i}....     ')
+            self.pa_list[i].offset=step[i][2]
+            self.pa_list[i].snap_shots.Process(step[i][0],step[i][1],step[i][2],self.pa_list[i].rec_mask,self.pa_list[i].lig_mask)
+            print(' done.\n')
+        print('Clustering pockets...    ',end='')
         self._ClusterPockets()
+        print(' done.')
         for i in range(self.size()):
+            print(f'Analysing pockets of MODEL{i}...    ',end='')
             self.pa_list[i]._PostProcessing()
+            print(f' done.\nScoring pockets of MODEL{i}...   ',end='')
             self.pa_list[i].pocketsinfo._CalcPocketScore()
+            self.pa_list[i].pocketsinfo._PocketGrouppAnalysis()
+            print(' done.\n')
 
 #%% helper class
 class PAHelper:
@@ -607,9 +649,9 @@ class PAHelper:
             for i in range(len(out)):
                 if out[i][0]==-1:
                     continue
-                f.writelines(f'rank={i+1} frame={out[i][0]*pa.offset+frame_shift+1:6d} pock_score={out[i][1]:10.3f} pock_space={out[i][2]} main_name={out[i][3]} sub_name={out[i][4]}\n{"id":^3s} {"rank":^4s} {"socre":^6s} {"space":^7s} {"occu":^6s} {"m_occu":^6s}\n')
+                f.writelines(f'rank={i+1} frame={out[i][0]*pa.offset+frame_shift+1:6d} pock_score={out[i][1]:10.3f} pock_space={out[i][2]} main_name={out[i][3]} minor_name={out[i][4]}\n{"id":^3s} {"rank":^4s} {"socre":^6s} {"space":^7s} {"mnpr%80":^8s} {"occu":^6s} {"m_occu":^6s}\n')
                 for j in info[i]:
-                    f.writelines(f'{j[0]:3d} {np.argwhere(all_p_rank==j[0])[0,0]:4d} {j[1]:6.2f} {j[2]:7.2f} {pa.pocketsinfo.GetOccupancyRatio(j[0],out[i][0]):6.4f} {mean_occu[j[0]]:6.4f}\n')
+                    f.writelines(f'{j[0]:3d} {np.argwhere(all_p_rank==j[0])[0,0]+1:4d} {j[1]:6.2f} {j[2]:7.2f} {pa.pocketsinfo.GetMeanNPR(j[0],80)*100:8.2f} {pa.pocketsinfo.GetOccupancyRatio(j[0],out[i][0]):6.4f} {mean_occu[j[0]]:6.4f}\n')
                 f.writelines('\n\n')
 
         np.savetxt(os.path.join(out_dir,'voltotal_v_time.dat'),pa.pocketsinfo.GetTotalVolVTime())
@@ -657,7 +699,7 @@ class PAHelper:
 
     @staticmethod
     def WritePocketAccor(pa:PocketsAnalysis,out_dir:str,**kw)->None:
-        score_cutoff=kw.get('score_cutoff',10)
+        score_cutoff=kw.get('score_cutoff',10.0)
         sync_name=kw.get('coexist_name','Pocket_coexistence rate.dat')
         accor_name=kw.get('accor_name','Pocket_correlation.dat')
         id_name=kw.get('id_name','Pocket_sync_corr_id.dat')
@@ -677,7 +719,10 @@ class PAHelper:
         name_file=kw.get('name_file','Pocket_group_name_list.dat')
         main_file=kw.get('main_file','Pocket_group_mainname_list.dat')
         g_v_t=kw.get('v_time_file','Pocket_group_v_time.dat')
-
+        id_name=kw.get('id_name','Pocket_sync_corr_id.dat')
+        #pocket score cutoff value
+        score_cutoff=kw.get('score_cutoff',10.0)
+        
         name_list,pgroup_v_time=pa.pocketsinfo.GetAllPocketGroupVTime()
         with open(os.path.join(out_dir,name_file),'w') as f:
             for i in name_list:
@@ -699,6 +744,17 @@ class PAHelper:
         with open(os.path.join(out_dir,main_file),'w') as f:
             for i in main_name:
                 f.writelines(f'{i[0]},{i[1]}\n')
+        np.savetxt(os.path.join(out_dir,id_name),np.arange(0,pa.pocketsinfo.GetAllScore().shape[0])[pa.pocketsinfo.GetAllScore()>score_cutoff],delimiter=',')
+
+    @staticmethod
+    def WtriteMainTransProb(pa:PocketsAnalysis,out_dir:str,**kw)->None:
+        mtp_name_file=kw.get('name_file','MTP_name_list.dat')
+        mtp_matrix_file=kw.get('matrix_file','MTP_matrix.dat')
+        name_list,matrix=pa.pocketsinfo.MainPocketTransProbAnalysis()
+        with open(os.path.join(out_dir,mtp_name_file),'w') as f:
+            for i in name_list:
+                f.writelines(f'{i}\n')
+        np.savetxt(os.path.join(out_dir,mtp_matrix_file),matrix)
 
     @staticmethod
     def WritePocketInfos(pa:PocketsAnalysis,out_dir:str,**kw)->None:
@@ -768,15 +824,17 @@ def GetPA(md)->PocketsAnalysis:
     protein=mdtraj.load(md['traj'].split(','),top=md["top"])
     print(f'{"done":>8s}.')
 
-    print('Parse  rec/lig mask...',end='')
     lig_mask=[]
     rec_mask=[]
     if 'lig_mask' in md.keys() and len(md['lig_mask'])!=0:
+        print('Parse  lig mask...',end='')
         lig_mask=ParserMask(protein,md['lig_mask'])
+        print(f'{"done":>8s}.')
     if 'rec_mask' in md.keys() and len(md['rec_mask'])!=0:
+        print('Parse  rec mask...',end='')
         rec_mask=ParserMask(protein,md['rec_mask'])
+        print(f'{"done":>8s}.')
     pa=PocketsAnalysis(protein,rec_mask=rec_mask,lig_mask=lig_mask)
-    print(f'{"done":>8s}.')
 
     if 'box' in md.keys() and len(md['box'])!=0:
         print('Parse Box...',end='')
@@ -799,24 +857,29 @@ def WriteFiles(pa:PocketsAnalysis,md)->None:
     out_dir=md['out']
     if bool(md.get('out_best','True')):
         print('Write best conformation...',end='')
-        PAHelper.WriteBestFrames(pa,os.path.join(out_dir,'./pock_info/best_conf'),life_time_coutoff=args.rank_lifetime_cutoff,frame_shift=args.frame_start,reserve_num=args.rank_conf_num,is_use_scoring=args.rank_is_score)
+        PAHelper.WriteBestFrames(pa,os.path.join(out_dir,'./pock_info/best_conf'),life_time_coutoff=int(md.get('best_lt_cutoff','10')),frame_shift=int(md.get('frame_start','0')),reserve_num=int(md.get('best_num','10')),is_use_scoring=bool(md.get('best_use_score','True')))
         print(f'{"done":>8s}.')
-    if bool(md.get('out_pock_info','True')):
+    if bool(md.get('out_pock_info','False')):
         print('Write pocket information...',end='')
         PAHelper.WritePocketInfos(pa,os.path.join(out_dir,'./pock_info/'))
         print(f'{"done":>8s}.')
-    if bool(md.get('out_main_best','True')):
+    if bool(md.get('out_main_best','False')):
         print('Write main group...',end='')
-        PAHelper.WriteMainBestFrames(pa,os.path.join(out_dir,'./pock_info/main_group'),life_time_coutoff=10,frame_shift=500)
+        PAHelper.WriteMainBestFrames(pa,os.path.join(out_dir,'./pock_info/main_group'),life_time_coutoff=int(md.get('main_lt_cutoff','10')),frame_shift=int(md.get('frame_start','0')),reserve_num=int(md.get('main_num','1')),is_use_scoring=bool(md.get('main_use_score','True')))
         print(f'{"done":>8s}.')
     if bool(md.get('out_coex','True')):
         print('Write coexist matrix...',end='')
-        PAHelper.WritePocketAccor(pa,os.path.join(out_dir,'./pock_info/'))
+        PAHelper.WritePocketAccor(pa,os.path.join(out_dir,'./pock_info/'),score_cutoff=float(md.get('score_cutoff','10')))
         print(f'{"done":>8s}.')
     if bool(md.get('out_corr','True')):
         print('Write correlation matrix...',end='')
         PAHelper.WriteGroupVtime(pa,os.path.join(out_dir,'./pock_info/'))
         print(f'{"done":>8s}.\n')
+    if bool(md.get('out_mtp','True')):
+        print('Write main pocket transformation probability matrix...',end='')
+        PAHelper.WriteGroupVtime(pa,os.path.join(out_dir,'./pock_info/'))
+        print(f'{"done":>8s}.\n')
+
 
 #%% plot class
 def cmToinch(value): 
@@ -867,7 +930,7 @@ class PlotHalper:
         ax[ax_row,ax_col].hist(ay,bins=params.get('bins',10),range=params.get('range',None),density=params.get('density',False),cumulative=params.get('cumulative',False))
 #%%arg parser
 class SmartFormatter(argparse.HelpFormatter):
-    def _split_lines(self, text: str, width: int) -> list[str]:
+    def _split_lines(self, text: str, width: int):
         if text.startswith('R|'):
             return text[2:].splitlines()
         return super()._split_lines(text, width)
@@ -881,7 +944,7 @@ parser.add_argument('--version', action='version', version='%(prog)s 1.0')
 parser.add_argument('--top', type=str,metavar='Path_to_your_topology_file',default='',
                     help='This parameter specifies the path to your topology file.')
 parser.add_argument('--traj', type=str,metavar='Path_to_your_traj_file',default='',
-                    help='This parameter specifies the path to your trace file.')
+                    help="This parameter specifies the path to the tracking file. Multiple paths separated by ','")
 parser.add_argument('--rec_mask',type=int,action='extend',nargs='+',default=[],metavar='rec_id',
                     help='''R|This parameter specifies your receptor protein residue index. 
 If neither rec_mask nor lig_mask are specified, all atoms are considered as proteins. 
@@ -910,22 +973,28 @@ parser.add_argument('--frame_start',type=int,default=0,metavar='integer, default
 parser.add_argument('--frame_stop',type=int,default=-1,metavar='integer, default=-1',help='This parameter specifies the frame to which the program ends processing, and the frames after this parameter will be ignored. The default value of this parameter is the last frame')
 parser.add_argument('--frame_offset',type=int,default=1,metavar='integer, default=1',help='This parameter specifies the frame interval step size for processing trajectories.')
 
-parser.add_argument('--rank_conf_num',type=int,default=10,metavar='integer, default=10',help='Maximum number of optimal conformational retention')
-parser.add_argument('--rank_lifetime_cutoff',type=int,default=10,metavar='integer, default=10, unit: frame',help='Truncated value of lifetime. Pockets with a lifetime less than this time will be ignored when calculating pocket scoring.')
-parser.add_argument('--rank_is_score',type=bool,default=True,metavar='bool, default=True',help='Whether to use pocket scoring function when calculating the optimal conformation. If it is not, the pocket volume will be used to rate the pocket.')
-
 parser.add_argument('--out',type=str,metavar='out_dir',default='./', help='The folder where the analysis results are saved')
 parser.add_argument('--out_best',type=bool,metavar='bool, default=True',default=True,help='Output the optimal conformation, which means the overall score of the pocket is the highest')
 parser.add_argument('--out_pock_info',type=bool,metavar='bool, default=False',default=False,help='Save the original information of the pocket in. npy format. For further analysis')
 parser.add_argument('--out_main_best',type=bool,metavar='bool, default=False',default=False,help='Output the optimal conformation of each main_group')
 parser.add_argument('--out_coex',type=bool,metavar='bool, default=False',default=False,help='Control whether to output sub pocket coexistence matrix')
 parser.add_argument('--out_corr',type=bool,metavar='bool, default=False',default=False,help='Control whether to output sub pocket correlation matrix')
+parser.add_argument('--out_mtp',type=bool,metavar='bool, default=False',default=False,help='Control whether to output main pocket transformation probability matrix')
+
+parser.add_argument('--best_num',type=int,default=10,metavar='integer, default=10',help='Maximum number of best conformation retention')
+parser.add_argument('--best_lt_cutoff',type=int,default=10,help='Truncated value of lifetime. Pockets with a lifetime less than this time will be ignored when calculating pocket scoring.')
+parser.add_argument('--best_use_score',type=bool,default=True,metavar='integer, default=10, unit: frame',help='Whether to use pocket scoring function when calculating the optimal conformation. If it is not, the pocket volume will be used to rate the pocket.')
+parser.add_argument('--main_num',type=int,default=1,help='Maximum number of best main group conformation retention.')
+parser.add_argument('--main_lt_cutoff',type=int,default=10,help='Truncated value of lifetime. Pockets with a lifetime less than this time will be ignored when calculating pocket scoring.')
+parser.add_argument('--main_use_score',type=bool,default=True,metavar='integer, default=1',help='Whether to use pocket scoring function when calculating the optimal main group conformation.')
+
 
 parser.add_argument('--config',type=str,default='',help='Specify the path to the control file. When this parameter is specified, all input information will be read from the control file. Other command line input parameters will be ignored')
 #%%
 # a=' --traj ./traj.nc --lig_mask 612 613 --frame_start 500 --frame_stop 1000 --out ./test --out_pock_info true --out_main_best true --out_coex true --out_corr true'
 # md=vars(parser.parse_args(a.split()))
 #(pytorch) PS G:\data\sars-cov-2\main_protease\mp_ihb_ensitrelvir\analysis\alphaspace> python G:\data\pocket_analysis\project\pocket_analysis.py --top .\com_wat_strip.prmtop --traj .\traj.nc --lig_mask 612 613 --frame_start 500 --frame_stop 1000 --out ./test --out_pock_info true --out_main_best true --out_coex true --out_corr true
+#conda init bash
 #%%
 if __name__=='__main__':
     if len(sys.argv)==1:
@@ -947,23 +1016,36 @@ if __name__=='__main__':
 
     if config['GENERAL']['mode']=='single':
         print('single mode')
-        pa=GetPA(config['MODEL1'])
+        pa=GetPA(config['MODEL0'])
         pa.SetDistCutoff(float(config['GENERAL'].get('dist_cutoff','3.0')))
-        pa.Analysis(args.frame_start,args.frame_stop,args.frame_offset)
-        WriteFiles(pa,config['MODEL1'])
+        ts=int(config[f'MODEL0'].get('frame_start','0'))
+        te=int(config[f'MODEL0'].get('frame_stop','-1'))
+        to=int(config[f'MODEL0'].get('frame_offset','1'))
+        pa.Analysis(ts,te,to)
+        WriteFiles(pa,config['MODEL0'])
     elif config['GENERAL']['mode']=='multi':
         print('multi mode')
         models=ModelGroup()
         models.SetDistCutoff(float(config['GENERAL'].get('dist_cutoff','3.0')))
         align_id=[]
+        step=[]
 
         for i in range(100):
             if f'MODEL{i}' in config:
-                print(config[f'MODEL{i}'])
-                for k,v in config[f'MODEL{i}'].items():
-                    print(f'{k} : {v}')
+                print(f'MODEL{i}')
+                # for k,v in config[f'MODEL{i}'].items():
+                #     print(f'{k} : {v}')
                 models.AddPA(GetPA(config[f'MODEL{i}']))
-                print(config[f'MODEL{i}'].get('align_mask').strip().split(','))
                 align_id.append(ParserMask(models[i].rec,config[f'MODEL{i}'].get('align_mask').strip(),mode='bb'))
+                ts=int(config[f'MODEL{i}'].get('frame_start','0'))
+                te=int(config[f'MODEL{i}'].get('frame_stop','-1'))
+                to=int(config[f'MODEL{i}'].get('frame_offset','1'))
+                step.append([ts,te,to])
+        print('start align model...    ',end='')
         models.AlignModel(align_id)  
-          
+        print('done')
+        models.Analysis(step)
+
+        for i in range(len(models.pa_list)):
+            print(f'Write data of MODEL{i}')
+            WriteFiles(models.pa_list[i],config[f'MODEL{i}'])

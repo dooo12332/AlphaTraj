@@ -250,6 +250,8 @@ class Snapshot:
         self.box_rng=box
 
     def FilterAlphasByLoc(self):
+        #print('start filter alpha by box...     ',end='')
+        osize=self._alpha_space.shape[0]
         limit:np.ndarray=self.box_rng
         new_alpha_xyz=[]
         new_alpha_space=[]
@@ -268,8 +270,11 @@ class Snapshot:
         self._alpha_xyz=np.array(new_alpha_xyz)
         self._alpha_space=np.array(new_alpha_space)
         self._alpha_space_nonpolar_ratio=np.array(new_alpha_space_nonpolar_ratio) 
+        #print(f'done.[{osize}]->[{self._alpha_space.shape[0]}]')
 
     def FilterAlphasByLig(self,lig_xyz:np.ndarray):
+        #print('start filter alpha by lig...     ',end='')
+        osize=self._alpha_space.shape[0]
         l=np.zeros((lig_xyz.shape[0],6))
         l[:,:3]=lig_xyz-self.lig_cutoff
         l[:,3:]=lig_xyz+self.lig_cutoff
@@ -292,3 +297,4 @@ class Snapshot:
         self._alpha_xyz=np.array(new_alpha_xyz)
         self._alpha_space=np.array(new_alpha_space)
         self._alpha_space_nonpolar_ratio=np.array(new_alpha_space_nonpolar_ratio) 
+        #print(f'done.[{osize}]->[{self._alpha_space.shape[0]}]')
