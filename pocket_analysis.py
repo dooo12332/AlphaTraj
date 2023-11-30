@@ -419,7 +419,7 @@ class PocketsInfo:
         main_list=sorted(main_list,key=lambda x:x[1],reverse=True)#sort by score
         main_frames_num_list=np.array([len(i[-1]) for i in main_list])
         main_id=np.argwhere(main_frames_num_list>frame_cutoff)
-        main_list=main_list[main_id]
+        main_list=[main_list[i] for i in main_id.flatten()]
         mname_list=[i[0] for i in main_list]
         out=np.zeros((len(main_list),len(main_list)))
         m_v_t=self.GetMainGroupVTime()
@@ -441,7 +441,8 @@ class PocketsAnalysis:
         else:
             self.rec_mask-=1
         
-        self.snap_shots=SnapShots(rec.superpose(rec,0))
+        rec=rec.superpose(rec,0)
+        self.snap_shots=SnapShots(rec)
         self.pocketsinfo=PocketsInfo()
         self.distance_cutoff:float=3.0
 
@@ -456,7 +457,7 @@ class PocketsAnalysis:
         #Extract pocket coordinates
         for ss in self.snap_shots.sslist:
             total_coords.extend(ss._pocket_xyz)
-        total_coords=np.array(total_coords,dtype=np.float16)
+        total_coords=np.array(total_coords)
         #pocket clustering
         self.pocketsinfo._pockets_cluter_id=fcluster(linkage(total_coords, method='average'), self.distance_cutoff,criterion='distance')
         self.pocketsinfo._pockets_cluter_id-=1
@@ -587,7 +588,7 @@ class ModelGroup:
         for pa in self.pa_list:
             for ss in pa.snap_shots.sslist:
                 total_coords.extend(ss._pocket_xyz)
-        total_coords=np.array(total_coords,dtype=np.float32)
+        total_coords=np.array(total_coords)
         #pocket clustering
         pockets_cluter_id=fcluster(linkage(total_coords, method='average'), self.distance_cutoff,criterion='distance')
         pockets_cluter_id-=1
@@ -748,9 +749,10 @@ class PAHelper:
 
     @staticmethod
     def WtriteMainTransProb(pa:PocketsAnalysis,out_dir:str,**kw)->None:
+        frame_cutoff=kw.get('frame_cutoff',0)
         mtp_name_file=kw.get('name_file','MTP_name_list.dat')
         mtp_matrix_file=kw.get('matrix_file','MTP_matrix.dat')
-        name_list,matrix=pa.pocketsinfo.MainPocketTransProbAnalysis()
+        name_list,matrix=pa.pocketsinfo.MainPocketTransProbAnalysis(frame_cutoff=frame_cutoff)
         with open(os.path.join(out_dir,mtp_name_file),'w') as f:
             for i in name_list:
                 f.writelines(f'{i}\n')
@@ -874,10 +876,10 @@ def WriteFiles(pa:PocketsAnalysis,md)->None:
     if bool(md.get('out_corr','True')):
         print('Write correlation matrix...',end='')
         PAHelper.WriteGroupVtime(pa,os.path.join(out_dir,'./pock_info/'))
-        print(f'{"done":>8s}.\n')
+        print(f'{"done":>8s}.')
     if bool(md.get('out_mtp','True')):
         print('Write main pocket transformation probability matrix...',end='')
-        PAHelper.WriteGroupVtime(pa,os.path.join(out_dir,'./pock_info/'))
+        PAHelper.WtriteMainTransProb(pa,os.path.join(out_dir,'./pock_info/'),frame_cutoff=float(md.get('main_mtp_cutoff','10')))
         print(f'{"done":>8s}.\n')
 
 
@@ -940,7 +942,7 @@ parser = argparse.ArgumentParser(
                     formatter_class=SmartFormatter,
                     description='Analyzing protein pocket features in molecular dynamics simulations trajectories.')
 
-parser.add_argument('--version', action='version', version='%(prog)s 1.0')
+parser.add_argument('--version', action='version', version='%(prog)s 1.1.2')
 parser.add_argument('--top', type=str,metavar='Path_to_your_topology_file',default='',
                     help='This parameter specifies the path to your topology file.')
 parser.add_argument('--traj', type=str,metavar='Path_to_your_traj_file',default='',
@@ -986,8 +988,8 @@ parser.add_argument('--best_lt_cutoff',type=int,default=10,help='Truncated value
 parser.add_argument('--best_use_score',type=bool,default=True,metavar='integer, default=10, unit: frame',help='Whether to use pocket scoring function when calculating the optimal conformation. If it is not, the pocket volume will be used to rate the pocket.')
 parser.add_argument('--main_num',type=int,default=1,help='Maximum number of best main group conformation retention.')
 parser.add_argument('--main_lt_cutoff',type=int,default=10,help='Truncated value of lifetime. Pockets with a lifetime less than this time will be ignored when calculating pocket scoring.')
-parser.add_argument('--main_use_score',type=bool,default=True,metavar='integer, default=1',help='Whether to use pocket scoring function when calculating the optimal main group conformation.')
-
+parser.add_argument('--main_use_score',type=bool,default=True,metavar='bool, default=True',help='Whether to use pocket scoring function when calculating the optimal main group conformation.')
+parser.add_argument('--main_mtp_cutoff',type=int,default=0,metavar='integer, default=0',help='Truncated value of main group lifetime.')
 
 parser.add_argument('--config',type=str,default='',help='Specify the path to the control file. When this parameter is specified, all input information will be read from the control file. Other command line input parameters will be ignored')
 #%%
@@ -1023,6 +1025,8 @@ if __name__=='__main__':
         to=int(config[f'MODEL0'].get('frame_offset','1'))
         pa.Analysis(ts,te,to)
         WriteFiles(pa,config['MODEL0'])
+        for i in range(10):
+            pa.rec[i].save(f'./test{i}.pdb')
     elif config['GENERAL']['mode']=='multi':
         print('multi mode')
         models=ModelGroup()
