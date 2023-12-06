@@ -7,8 +7,6 @@ from alphaspace2 import Snapshot as ss
 from typing import List,Union,Dict,Tuple
 import mdtraj
 import numpy as np
-import matplotlib
-from matplotlib import pyplot as plt
 from scipy.cluster.hierarchy import fcluster, linkage
 from configparser import ConfigParser
 from tqdm import tqdm, trange
@@ -251,7 +249,7 @@ class PocketsInfo:
     def GetVolVTime(self,pid:int)->np.ndarray:
         return self._pocket_volume_v_time[pid].copy()
 
-    def GetTotalVolVTime(self,score_cutoff=10)->np.ndarray:
+    def GetTotalVolVTime(self,score_cutoff=0)->np.ndarray:
         return np.sum(self._pocket_volume_v_time[self._pockets_score>score_cutoff],axis=0)
 
     def GetNoZeroVolVTime(self,pid:int)->np.ndarray:
@@ -414,19 +412,23 @@ class PocketsInfo:
     def GetGroupBestConf(self,main_name:str,sub_name:str,reserve_num:int,percentile:int=80,life_time_cutoff:int=10,is_use_scoring:bool=True):
         return self._GetBestConf(self._pocket_composition[main_name][2][sub_name][2],reserve_num,percentile,life_time_cutoff,is_use_scoring)
 
-    def MainPocketTransProbAnalysis(self,frame_cutoff=0)->Tuple[List[str],np.ndarray]:
+    def MainPocketTransProbAnalysis(self,frame_cutoff=0)->Tuple[List[str],List[int],np.ndarray]:
         main_list=list(self._pocket_composition.values())
         main_list=sorted(main_list,key=lambda x:x[1],reverse=True)#sort by score
         main_frames_num_list=np.array([len(i[-1]) for i in main_list])
-        main_id=np.argwhere(main_frames_num_list>frame_cutoff)
-        main_list=[main_list[i] for i in main_id.flatten()]
         mname_list=[i[0] for i in main_list]
         out=np.zeros((len(main_list),len(main_list)))
         m_v_t=self.GetMainGroupVTime()
         for i in range(len(m_v_t)-1):
             if m_v_t[i]!=m_v_t[i+1]:
                 out[mname_list.index(m_v_t[i]),mname_list.index(m_v_t[i+1])]+=1
-        return (mname_list,out)
+        # main_id=np.argwhere(main_frames_num_list>frame_cutoff)
+        # out=out[main_id]
+        # out=out[:,main_id]
+        # main_list=[main_list[i] for i in main_id.flatten()]
+        mname_list=[i[0] for i in main_list]
+        mlt_list=[len(i[-1]) for i in main_list]
+        return (mname_list,mlt_list,out)
 
 class PocketsAnalysis:
     def __init__(self,rec:mdtraj.Trajectory,rec_mask:List[int]=[],lig_mask:List[int]=[]) -> None:
@@ -644,8 +646,8 @@ class PAHelper:
             tmp=[[pcom[j],pa.pocketsinfo.GetScore(pcom[j]),pa.pocketsinfo.GetVol(pcom[j],out[i][0])]for j in range(len(pcom))]
             tmp=sorted(tmp,key=lambda x:x[1],reverse=True)
             info.append(tmp)
-            pa.WritePockets(out[i][0],os.path.join(pdb_dir,f'apocket-r{i:03d}.pdb'))
-            pa.rec[frame_shift+out[i][0]].save(os.path.join(pdb_dir,f'protein-r{i:03d}-f{frame_shift+out[i][0]*pa.offset:05d}.pdb'))
+            pa.WritePockets(out[i][0],os.path.join(pdb_dir,f'apocket-r{i+1:03d}.pdb'))
+            pa.rec[frame_shift+out[i][0]].save(os.path.join(pdb_dir,f'protein-r{i+1:03d}-f{frame_shift+out[i][0]*pa.offset+1:05d}.pdb'))
         with open(os.path.join(out_dir,'out.dat'),'w') as f:
             for i in range(len(out)):
                 if out[i][0]==-1:
@@ -655,7 +657,8 @@ class PAHelper:
                     f.writelines(f'{j[0]:3d} {np.argwhere(all_p_rank==j[0])[0,0]+1:4d} {j[1]:6.2f} {j[2]:7.2f} {pa.pocketsinfo.GetMeanNPR(j[0],80)*100:8.2f} {pa.pocketsinfo.GetOccupancyRatio(j[0],out[i][0]):6.4f} {mean_occu[j[0]]:6.4f}\n')
                 f.writelines('\n\n')
 
-        np.savetxt(os.path.join(out_dir,'voltotal_v_time.dat'),pa.pocketsinfo.GetTotalVolVTime())
+        np.savetxt(os.path.join(out_dir,'vol_effect_v_time.dat'),pa.pocketsinfo.GetTotalVolVTime(score_cutoff=10))
+        np.savetxt(os.path.join(out_dir,'vol_total_v_time.dat'),pa.pocketsinfo.GetTotalVolVTime(score_cutoff=0))
         
     @staticmethod
     def WriteBestFrames(pa:PocketsAnalysis,out_dir:str,**kw)->None:
@@ -752,32 +755,46 @@ class PAHelper:
         frame_cutoff=kw.get('frame_cutoff',0)
         mtp_name_file=kw.get('name_file','MTP_name_list.dat')
         mtp_matrix_file=kw.get('matrix_file','MTP_matrix.dat')
-        name_list,matrix=pa.pocketsinfo.MainPocketTransProbAnalysis(frame_cutoff=frame_cutoff)
+        name_list,life_time,matrix=pa.pocketsinfo.MainPocketTransProbAnalysis(frame_cutoff=frame_cutoff)
         with open(os.path.join(out_dir,mtp_name_file),'w') as f:
-            for i in name_list:
-                f.writelines(f'{i}\n')
+            for i in range(len(name_list)):
+                f.writelines(f'{name_list[i]} {life_time[i]}\n')
         np.savetxt(os.path.join(out_dir,mtp_matrix_file),matrix)
 
     @staticmethod
     def WritePocketInfos(pa:PocketsAnalysis,out_dir:str,**kw)->None:
+        ftype=kw.get('ftype','txt')
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
         pock_dir=os.path.join(out_dir,'pock_data')
         if not os.path.exists(pock_dir):
             os.makedirs(pock_dir)
-
-        np.save(os.path.join(pock_dir,'vol_v_time.npy'),pa.pocketsinfo._pocket_volume_v_time)
-        np.save(os.path.join(pock_dir,'vol_v_time_sorted.npy'),pa.pocketsinfo._pocket_volume_v_time_sorted)
-        np.save(os.path.join(pock_dir,'voltotal_v_time.npy'),pa.pocketsinfo.GetTotalVolVTime())
-        np.save(os.path.join(pock_dir,'pock_score.npy'),pa.pocketsinfo.GetAllScore())
-        np.save(os.path.join(pock_dir,'pock_lifetime.npy'),pa.pocketsinfo.GetAllLifeTime())
-        np.save(os.path.join(pock_dir,'npr_v_time.npy'),pa.pocketsinfo._pocket_nonpolar_v_time)
-        if pa.rec_mask.shape[0]!=0 and pa.lig_mask.shape[0]!=0:
-            np.save(os.path.join(pock_dir,'occupancy_v_time.npy'),pa.pocketsinfo._pocket_occupancy_v_time)
-            mean_occu=[]
-            for i in range(pa.pocketsinfo.GetPocketNum()):
-                mean_occu.append(pa.pocketsinfo.GetMeanOccRatio(i,80))
-            np.save(os.path.join(pock_dir,'occupancy_mean.npy'),np.array(mean_occu))
+        if ftype=='npy':
+            np.save(os.path.join(pock_dir,'vol_v_time.npy'),pa.pocketsinfo._pocket_volume_v_time)
+            np.save(os.path.join(pock_dir,'vol_v_time_sorted.npy'),pa.pocketsinfo._pocket_volume_v_time_sorted)
+            np.save(os.path.join(pock_dir,'voltotal_v_time.npy'),pa.pocketsinfo.GetTotalVolVTime())
+            np.save(os.path.join(pock_dir,'pock_score.npy'),pa.pocketsinfo.GetAllScore())
+            np.save(os.path.join(pock_dir,'pock_lifetime.npy'),pa.pocketsinfo.GetAllLifeTime())
+            np.save(os.path.join(pock_dir,'npr_v_time.npy'),pa.pocketsinfo._pocket_nonpolar_v_time)
+            if pa.rec_mask.shape[0]!=0 and pa.lig_mask.shape[0]!=0:
+                np.save(os.path.join(pock_dir,'occupancy_v_time.npy'),pa.pocketsinfo._pocket_occupancy_v_time)
+                mean_occu=[]
+                for i in range(pa.pocketsinfo.GetPocketNum()):
+                    mean_occu.append(pa.pocketsinfo.GetMeanOccRatio(i,80))
+                np.save(os.path.join(pock_dir,'occupancy_mean.npy'),np.array(mean_occu))
+        elif ftype=='txt':
+            np.savetxt(os.path.join(pock_dir,'vol_v_time.txt'),pa.pocketsinfo._pocket_volume_v_time)
+            np.savetxt(os.path.join(pock_dir,'vol_v_time_sorted.txt'),pa.pocketsinfo._pocket_volume_v_time_sorted)
+            np.savetxt(os.path.join(pock_dir,'voltotal_v_time.txt'),pa.pocketsinfo.GetTotalVolVTime())
+            np.savetxt(os.path.join(pock_dir,'pock_score.txt'),pa.pocketsinfo.GetAllScore())
+            np.savetxt(os.path.join(pock_dir,'pock_lifetime.txt'),pa.pocketsinfo.GetAllLifeTime())
+            np.savetxt(os.path.join(pock_dir,'npr_v_time.txt'),pa.pocketsinfo._pocket_nonpolar_v_time)
+            if pa.rec_mask.shape[0]!=0 and pa.lig_mask.shape[0]!=0:
+                np.savetxt(os.path.join(pock_dir,'occupancy_v_time.txt'),pa.pocketsinfo._pocket_occupancy_v_time)
+                mean_occu=[]
+                for i in range(pa.pocketsinfo.GetPocketNum()):
+                    mean_occu.append(pa.pocketsinfo.GetMeanOccRatio(i,80))
+                np.savetxt(os.path.join(pock_dir,'occupancy_mean.txt'),np.array(mean_occu))
 
 def ParserBox(input:List[str])->Tuple[List[List[int]],List[List[float]]]:
     atom_id=[]
@@ -863,7 +880,7 @@ def WriteFiles(pa:PocketsAnalysis,md)->None:
         print(f'{"done":>8s}.')
     if bool(md.get('out_pock_info','False')):
         print('Write pocket information...',end='')
-        PAHelper.WritePocketInfos(pa,os.path.join(out_dir,'./pock_info/'))
+        PAHelper.WritePocketInfos(pa,os.path.join(out_dir,'./pock_info/'),ftype=md.get('pock_info_ftype','npy'))
         print(f'{"done":>8s}.')
     if bool(md.get('out_main_best','False')):
         print('Write main group...',end='')
@@ -882,54 +899,6 @@ def WriteFiles(pa:PocketsAnalysis,md)->None:
         PAHelper.WtriteMainTransProb(pa,os.path.join(out_dir,'./pock_info/'),frame_cutoff=float(md.get('main_mtp_cutoff','10')))
         print(f'{"done":>8s}.\n')
 
-
-#%% plot class
-def cmToinch(value): 
-    return value/2.54 
-
-class PlotHalper:
-    def __init__(self,**kw) -> None:
-        plt.rcParams['figure.dpi'] = kw.get('figdpi',300)
-        plt.rcParams['savefig.dpi'] = kw.get('sfigdpi',300)
-        matplotlib.rcParams['font.family'] = kw.get('font','Times New Roman')
-        self.flierprops={
-        'markerfacecolor':'aliceblue',
-        'marker': 'D',
-        'color': 'black',
-        'markeredgecolor': 'black',
-        'markersize': 3.0,
-        'linestyle': 'none',
-        'linewidth': kw.get('linewidth',1.0)}
-
-    def Hist(self,ay:np.ndarray,params:dict={}):
-        fig, ax = plt.subplots(figsize=(cmToinch(params.get('length',20)),cmToinch(params.get('width',10))))
-
-        ax.set_xlabel(params.get('xlabel','xlabel'))
-        ax.set_ylabel(params.get('ylabel','ylabel'))
-        ax.set_title(params.get('title','title'))
-
-        ax.set_yscale(params.get('xscale','linear'))#linear log symlog logit
-        ax.set_yscale(params.get('yscale','linear'))
-        #ax.set_xticks(np.arange(0,40,1),[str(i) for i in range(10,51)])
-        #ax.xaxis.set_major_formatter(lambda x,pos:str(pos+10))
-        # if 'ylim1' in params and 'ylim2' in params:
-        #     ax.set_ylim(params['ylim1'],params['ylim2'])
-
-        ax.hist(ay,bins=params.get('bins',10),range=params.get('range',None),density=params.get('density',False),cumulative=params.get('cumulative',False))
-        #plt.xticks(rotation=params.get('xticks_rotation',0))
-        #plt.yticks(rotation=params.get('yticks_rotation',0))
-        return fig, ax
-
-    def test(self,ay:np.ndarray,params:dict={},axes=None,ax_row=-1,ax_col=-1):
-        ax=axes
-        ax[ax_row,ax_col].set_xlabel(params.get('xlabel','xlabel'))
-        ax[ax_row,ax_col].set_ylabel(params.get('ylabel','ylabel'))
-        ax[ax_row,ax_col].set_title(params.get('title','title'))
-
-        ax[ax_row,ax_col].set_yscale(params.get('xscale','linear'))#linear log symlog logit
-        ax[ax_row,ax_col].set_yscale(params.get('yscale','linear'))
-
-        ax[ax_row,ax_col].hist(ay,bins=params.get('bins',10),range=params.get('range',None),density=params.get('density',False),cumulative=params.get('cumulative',False))
 #%%arg parser
 class SmartFormatter(argparse.HelpFormatter):
     def _split_lines(self, text: str, width: int):
@@ -981,7 +950,7 @@ parser.add_argument('--out_pock_info',type=bool,metavar='bool, default=False',de
 parser.add_argument('--out_main_best',type=bool,metavar='bool, default=False',default=False,help='Output the optimal conformation of each main_group')
 parser.add_argument('--out_coex',type=bool,metavar='bool, default=False',default=False,help='Control whether to output sub pocket coexistence matrix')
 parser.add_argument('--out_corr',type=bool,metavar='bool, default=False',default=False,help='Control whether to output sub pocket correlation matrix')
-parser.add_argument('--out_mtp',type=bool,metavar='bool, default=False',default=False,help='Control whether to output main pocket transformation probability matrix')
+parser.add_argument('--out_mtp',type=bool,metavar='bool, default=False',default=False,help='Control whether to output main main_group transformation probability matrix')
 
 parser.add_argument('--best_num',type=int,default=10,metavar='integer, default=10',help='Maximum number of best conformation retention')
 parser.add_argument('--best_lt_cutoff',type=int,default=10,help='Truncated value of lifetime. Pockets with a lifetime less than this time will be ignored when calculating pocket scoring.')
@@ -990,13 +959,10 @@ parser.add_argument('--main_num',type=int,default=1,help='Maximum number of best
 parser.add_argument('--main_lt_cutoff',type=int,default=10,help='Truncated value of lifetime. Pockets with a lifetime less than this time will be ignored when calculating pocket scoring.')
 parser.add_argument('--main_use_score',type=bool,default=True,metavar='bool, default=True',help='Whether to use pocket scoring function when calculating the optimal main group conformation.')
 parser.add_argument('--main_mtp_cutoff',type=int,default=0,metavar='integer, default=0',help='Truncated value of main group lifetime.')
+parser.add_argument('--pock_info_ftype',type=str,choices=['npy','txt'],default='npy',help='The file format for pocket information, default to npy.')
 
 parser.add_argument('--config',type=str,default='',help='Specify the path to the control file. When this parameter is specified, all input information will be read from the control file. Other command line input parameters will be ignored')
-#%%
-# a=' --traj ./traj.nc --lig_mask 612 613 --frame_start 500 --frame_stop 1000 --out ./test --out_pock_info true --out_main_best true --out_coex true --out_corr true'
-# md=vars(parser.parse_args(a.split()))
-#(pytorch) PS G:\data\sars-cov-2\main_protease\mp_ihb_ensitrelvir\analysis\alphaspace> python G:\data\pocket_analysis\project\pocket_analysis.py --top .\com_wat_strip.prmtop --traj .\traj.nc --lig_mask 612 613 --frame_start 500 --frame_stop 1000 --out ./test --out_pock_info true --out_main_best true --out_coex true --out_corr true
-#conda init bash
+
 #%%
 if __name__=='__main__':
     if len(sys.argv)==1:
