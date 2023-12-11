@@ -150,17 +150,11 @@ class PocketsInfo:
             tsumscore=0
             tsumvol=0
             for j in range(self.GetPocketNum()):
+                tvol=self._pocket_volume_v_time[j,i] if self._pocket_volume_v_time[j,i]<self.GetPCTLVol(j,percentile) else self.GetPCTLVol(j,percentile)
+                tsumscore+=(tvol*score[j])
+                tsumvol+=tvol
                 tvol=self._pocket_volume_v_time[j,i]
-                if tvol>0 and self.GetLifeTime(j)>life_time_cutoff:
-                    if tvol > self.GetPCTLVol(j,percentile):
-                        tvol=self.GetPCTLVol(j,percentile)
-                    tsumscore+=tvol*score[j]
-                    tsumvol+=tvol
             out.append([i,tsumscore,tsumvol,self.GetMainName(i),self.GetMinorName(i)])
-            # for k in range(5):
-            #     if tsumscore>out[k][1]:
-            #         out.insert(k,[i,tsumscore,tsumvol,self.GetMainName(i),self.GetSubName(i)])
-            #         break
         out=sorted(out,key=lambda x:x[1],reverse=True)
         return out[:reserve_num]
 
@@ -991,8 +985,6 @@ if __name__=='__main__':
         to=int(config[f'MODEL0'].get('frame_offset','1'))
         pa.Analysis(ts,te,to)
         WriteFiles(pa,config['MODEL0'])
-        for i in range(10):
-            pa.rec[i].save(f'./test{i}.pdb')
     elif config['GENERAL']['mode']=='multi':
         print('multi mode')
         models=ModelGroup()
