@@ -848,7 +848,7 @@ class PAHelper:
             pminor_num=pscore[pscore>=10].shape[0]-pscore[pscore>=20].shape[0]
             pinvalid_num=pscore[pscore<10].shape[0]
             f.writelines(f"sub-pocket num: {pa.pocketsinfo.GetPocketNum()}\nmain sub-pocket num: {pmain_num}\nminor sub-pocket num: {pminor_num}\ninvalid sub-pocket num: {pinvalid_num}\n\n")
-            f.writelines(f"{'id':>5s} {'rank':>5s} {'score':>10s} {'lifetime':>10s} {'med_vol':>10s} {'max_vol':>10s} {'min_vol':>10s} {'vol_f0.8':>10s} {'%moccu':>10s} {'%mnpr':>10s} {'npr-std':>10s}\n")
+            f.writelines(f"{'id':>5s} {'rank':>5s} {'score':>10s} {'lifetime':>10s} {'med_vol':>10s} {'max_vol':>10s} {'min_vol':>10s} {'vol_f0.8':>10s} {'moccu':>10s} {'mnpr':>10s} {'npr-std':>10s}\n")
             for i in range(pa.pocketsinfo.GetPocketNum()):
                 f.writelines(f"{i:>5d} {prank[i]+1:>5d} {pscore[i]:>10.4f} {pa.pocketsinfo.GetLifeTime(i):>10d} {pa.pocketsinfo.GetMedianVol(i):>10.4f} {pa.pocketsinfo.GetMaxVol(i):>10.4f} {pa.pocketsinfo.GetMinVol(i):>10.4f} {pa.pocketsinfo.GetVolumeFluctuations(i,80)[-1]:>10.4F} {pa.pocketsinfo.GetMeanOccRatio(i):>10.4f} {pa.pocketsinfo.GetMeanNPR(i):>10.4f} {np.sqrt(pa.pocketsinfo.GetMSENPR(i,80)):>10.4f}\n")
 
