@@ -20,7 +20,7 @@ class Snapshot:
         #New parameters
         self._filter_alphas_byloc=False
         self.box_rng:np.ndarray=np.zeros((1,6))
-        self.lig_cutoff=kw.get('lig_cutoff',3.0)
+        self.lig_cutoff=kw.get('lig_cutoff',4.0)
         #end
 
         self.residue_names = None
