@@ -573,6 +573,9 @@ class PocketsAnalysis:
         resi=1
         serial=1
         piday=self.pocketsinfo._pocket_cluster_splited[frame]
+        prank=[self.pocketsinfo._pocket_rank[i] for i in piday]
+        sort_id=np.argsort(prank)
+        piday=piday[sort_id]
         pxyz=self.snap_shots.sslist[frame]._pocket_xyz
         axyz=self.snap_shots.sslist[frame]._alpha_xyz
         #print(f'piday={piday}')
@@ -581,15 +584,15 @@ class PocketsAnalysis:
             for indx in range(piday.shape[0]):
                 #print(f'indx={indx},pockcomp={self.snap_shots.GetPockComposition(frame,indx)}')
                 #serial[]atom_name[]res_name[][2]res_seq[][][][4]xyz-occupancy-tempfactor[][][][][][][][][][][11]element-charge
-                tline=f"{'ATOM':<6s}{serial:>5d} {'PCC':^4s} {'APL':>3s}  {resi:>4d}    {pxyz[indx][0]:8.3f}{pxyz[indx][1]:8.3f}{pxyz[indx][2]:8.3f}{1.0:6.2f}{piday[indx]:6.2f}          {'PC':2s} 0\n"
+                tline=f"{'ATOM':<6s}{serial:>5d} {'PCC':^4s} {'APL':>3s}  {resi:>4d}    {pxyz[indx][0]:8.3f}{pxyz[indx][1]:8.3f}{pxyz[indx][2]:8.3f}{1.0:6.2f}{self.pocketsinfo._pocket_rank[piday[indx]]+1:6.2f}          {'PC':2s} 0\n"
                 f.writelines(tline)
                 serial+=1
                 for aid in self.snap_shots.GetPockComposition(frame,indx):
                     #print(f'aid={aid}')
                     if self.snap_shots.sslist[frame]._alpha_contact[aid]==0:
-                        tline=f"{'ATOM':<6s}{serial:>5d} {'AAU':^4s} {'APL':>3s}  {resi:>4d}    {axyz[aid,0]:8.3f}{axyz[aid,1]:8.3f}{axyz[aid,2]:8.3f}{1.0:6.2f}{piday[indx]:6.2f}          {'AC':2s} 0\n"
+                        tline=f"{'ATOM':<6s}{serial:>5d} {'AAU':^4s} {'APL':>3s}  {resi:>4d}    {axyz[aid,0]:8.3f}{axyz[aid,1]:8.3f}{axyz[aid,2]:8.3f}{1.0:6.2f}{self.pocketsinfo._pocket_rank[piday[indx]]+1:6.2f}          {'AC':2s} 0\n"
                     else:
-                        tline=f"{'ATOM':<6s}{serial:>5d} {'AAO':^4s} {'APL':>3s}  {resi:>4d}    {axyz[aid,0]:8.3f}{axyz[aid,1]:8.3f}{axyz[aid,2]:8.3f}{1.0:6.2f}{piday[indx]:6.2f}          {'AC':2s} 0\n"
+                        tline=f"{'ATOM':<6s}{serial:>5d} {'AAO':^4s} {'APL':>3s}  {resi:>4d}    {axyz[aid,0]:8.3f}{axyz[aid,1]:8.3f}{axyz[aid,2]:8.3f}{1.0:6.2f}{self.pocketsinfo._pocket_rank[piday[indx]]+1:6.2f}          {'AC':2s} 0\n"
                     f.writelines(tline)
                     serial+=1
                 resi+=1
