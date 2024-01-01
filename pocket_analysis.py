@@ -108,10 +108,10 @@ class PocketsInfo:
         tmp_comp=self.GetPocketComposition(frame)
         for j in tmp_comp:
             if self.GetScore(j)>main_score_cutoff:
-                main_key.append([j,self.GetScore(j)])
+                main_key.append([self._pocket_rank[j]+1,self.GetScore(j)])
                 main_score+=self.GetScore(j)
             elif self.GetScore(j)>sub_score_cutoff:
-                sub_key.append([j,self.GetScore(j)])
+                sub_key.append([self._pocket_rank[j]+1,self.GetScore(j)])
                 sub_score+=self.GetScore(j)
         main_key=sorted(main_key,key=lambda x:x[1],reverse=True)
         sub_key=sorted(sub_key,key=lambda x:x[1],reverse=True)
@@ -564,9 +564,9 @@ class PocketsAnalysis:
         self._PostProcessing()
         print(' done.\nScoring pockets...   ',end='')
         self.pocketsinfo._CalcPocketScore()
-        self.pocketsinfo._PocketGrouppAnalysis()
         self.pocketsinfo._CalaPocketRank()
         self.pocketsinfo._CalcTotalScoreVTime()
+        self.pocketsinfo._PocketGrouppAnalysis()
         print(' done.\n')
 
     def WritePockets(self,frame:int,out_file:str)->None:
@@ -663,6 +663,8 @@ class ModelGroup:
             self.pa_list[i]._PostProcessing()
             print(f' done.\nScoring pockets of MODEL{i}...   ',end='')
             self.pa_list[i].pocketsinfo._CalcPocketScore()
+            self.pa_list[i].pocketsinfo._CalaPocketRank()
+            self.pa_list[i].pocketsinfo._CalcTotalScoreVTime()
             self.pa_list[i].pocketsinfo._PocketGrouppAnalysis()
             print(' done.\n')
 
