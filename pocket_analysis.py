@@ -144,10 +144,10 @@ class PocketsInfo:
                 self._pocket_composition[main_name][3].append(i)
                 self._pocket_composition[main_name][2][sub_name][2].append(i)
 
-    def _CalcTotalScoreVTime(self,percentile:int=80,is_use_scoring:bool=True):
+    def _CalcTotalScoreVTime(self,score_cutoff:float=0,percentile:int=80,is_use_scoring:bool=True):
         self._total_score_v_time=np.zeros(self.GetFrameNum())
         score=self._pockets_score.copy()
-        score[score<10]=0
+        score[score<score_cutoff]=0
         score[score>0]=np.log10(score[score>0]-8)
         if is_use_scoring==False:
             score=score*0+1
@@ -158,7 +158,7 @@ class PocketsInfo:
                     tsumscore+=(tvol*score[j])
             self._total_score_v_time[i]=tsumscore
 
-    def _GetBestConf(self,frame_list:List[int],reserve_num:int,percentile:int=80,is_use_scoring:bool=True)->list:
+    def _GetBestConf(self,frame_list:List[int],reserve_num:int)->list:
         ttscore=self._total_score_v_time.copy()[frame_list]
         tvol=self.GetTotalVolVTime(score_cutoff=10)
         sort_id=np.argsort(ttscore)
@@ -402,7 +402,7 @@ class PocketsInfo:
 
     def GetBestConf(self,reserve_num:int,percentile:int=80,is_use_scoring:bool=True):
         frame_list=list(range(self.GetFrameNum()))
-        return self._GetBestConf(frame_list,reserve_num,percentile,is_use_scoring)
+        return self._GetBestConf(frame_list,reserve_num)
 
     def GetMainGroupName(self)->List[str]:
         return list(self._pocket_composition.keys())
@@ -447,13 +447,13 @@ class PocketsInfo:
                 count+=1
         return (name,self._pocket_composition_v_time.copy())
 
-    def GetMainBestConf(self,main_name:str,reserve_num:int,percentile:int=80,is_use_scoring:bool=True):
-        return self._GetBestConf(self._pocket_composition[main_name][3],reserve_num,percentile,is_use_scoring)
+    def GetMainBestConf(self,main_name:str,reserve_num:int):
+        return self._GetBestConf(self._pocket_composition[main_name][3],reserve_num)
 
-    def GetGroupBestConf(self,main_name:str,sub_name:str,reserve_num:int,percentile:int=80,life_time_cutoff:int=10,is_use_scoring:bool=True):
-        return self._GetBestConf(self._pocket_composition[main_name][2][sub_name][2],reserve_num,percentile,life_time_cutoff,is_use_scoring)
+    def GetGroupBestConf(self,main_name:str,sub_name:str,reserve_num:int):
+        return self._GetBestConf(self._pocket_composition[main_name][2][sub_name][2],reserve_num,)
 
-    def MainPocketTransProbAnalysis(self,frame_cutoff=0)->Tuple[List[str],List[int],np.ndarray]:
+    def MainPocketTransProbAnalysis(self)->Tuple[List[str],List[int],np.ndarray,np.ndarray]:
         main_list=list(self._pocket_composition.values())
         main_list=sorted(main_list,key=lambda x:x[1],reverse=True)#sort by score
         main_frames_num_list=np.array([len(i[-1]) for i in main_list])
@@ -461,18 +461,17 @@ class PocketsInfo:
         out=np.zeros((len(main_list),len(main_list)))
         m_v_t=self.GetMainGroupVTime()
         for i in range(len(m_v_t)-1):
-            if m_v_t[i]!=m_v_t[i+1]:
-                out[mname_list.index(m_v_t[i]),mname_list.index(m_v_t[i+1])]+=1
-        # main_id=np.argwhere(main_frames_num_list>frame_cutoff)
-        # out=out[main_id]
-        # out=out[:,main_id]
-        # main_list=[main_list[i] for i in main_id.flatten()]
+            #if m_v_t[i]!=m_v_t[i+1]:
+            out[mname_list.index(m_v_t[i]),mname_list.index(m_v_t[i+1])]+=1
         mname_list=[i[0] for i in main_list]
         mlt_list=[len(i[-1]) for i in main_list]
-        return (mname_list,mlt_list,out)
+        norm_out=out.copy()
+        for i in range(len(main_list)):
+            norm_out[i]/=len(main_list[i][-1])
+        return (mname_list,mlt_list,out,norm_out)
 
 class PocketsAnalysis:
-    def __init__(self,rec:mdtraj.Trajectory,rec_mask:List[int]=[],lig_mask:List[int]=[]) -> None:
+    def __init__(self,rec:mdtraj.Trajectory,rec_mask:List[int]=[],lig_mask:List[int]=[],**kw) -> None:
         self.rec:mdtraj.Trajectory=rec
         self.lig_mask:np.ndarray=np.array(lig_mask)
         self.rec_mask:np.ndarray=np.array(rec_mask)
@@ -488,6 +487,11 @@ class PocketsAnalysis:
         self.snap_shots=SnapShots(rec)
         self.pocketsinfo=PocketsInfo()
         self.distance_cutoff:float=3.0
+
+        self.score_cutoff=kw.get('score_cutoff',10.0)
+        self.is_use_score=kw.get('is_use_score',True)
+        self.percentile=kw.get('percentile',80.0)
+        #score_cutoff:float=0,percentile:int=80,is_use_scoring:bool=True
 
     def size(self)->int:
         '''
@@ -548,11 +552,23 @@ class PocketsAnalysis:
             if is_set:
                 self.snap_shots.SetBox(center_atom_id,length)
 
+    def isUseScore(self,is_use_score:bool):
+        self.is_use_score=is_use_score
+
     def SetLigCutoff(self,lig_cutoff:float):
         self.snap_shots.SetLigCutoff(lig_cutoff)
 
     def SetDistCutoff(self,distance:float):
         self.distance_cutoff=distance
+
+    def SetScoreCutoff(self,score_cutoff:float):
+        self.score_cutoff=score_cutoff
+
+    def SetPercentile(self,percentile:int):
+        if percentile<0 or percentile>100:
+            print('Percentile must be an integer between 0 and 100')
+            return
+        self.percentile=percentile
 
     def Analysis(self,start:int=0,end:int=-1,offset:int=1):
         print('processing snap shots....     ')
@@ -565,7 +581,7 @@ class PocketsAnalysis:
         print(' done.\nScoring pockets...   ',end='')
         self.pocketsinfo._CalcPocketScore()
         self.pocketsinfo._CalaPocketRank()
-        self.pocketsinfo._CalcTotalScoreVTime()
+        self.pocketsinfo._CalcTotalScoreVTime(score_cutoff=self.score_cutoff,percentile=self.percentile,is_use_scoring=self.is_use_score)
         self.pocketsinfo._PocketGrouppAnalysis()
         print(' done.\n')
 
@@ -716,25 +732,19 @@ class PAHelper:
     def WriteBestFrames(pa:PocketsAnalysis,out_dir:str,**kw)->None:
         '''
         reserve_num(type:int default:10)
-        percentile(type:int range:0-100 default:80)
-        is_use_scoring(type:bool default:True)
         frame_shift(type:int default:0)
         '''
         reserve_num=kw.get('reserve_num',10)
-        percentile=kw.get('percentile',80)
-        is_use_scoring=kw.get('is_use_scoring',True)
         frame_shift=kw.get('frame_shift',0)
         #score_cutoff=kw.get('score_cutoff',10)
 
-        out=pa.pocketsinfo.GetBestConf(reserve_num=reserve_num,percentile=percentile,is_use_scoring=is_use_scoring)
+        out=pa.pocketsinfo.GetBestConf(reserve_num=reserve_num)
         PAHelper._WriteBestFrames(pa,out_dir,out,frame_shift=frame_shift)
 
     @staticmethod
     def WriteMainBestFrames(pa:PocketsAnalysis,out_dir:str,**kw)->None:
         '''
         reserve_num(type:int default:10)
-        percentile(type:int range:0-100 default:80)
-        is_use_scoring(type:bool default:True)
         frame_shift(type:int default:0)
         '''
         reserve_num=kw.get('reserve_num',1)
@@ -746,7 +756,7 @@ class PAHelper:
         main_list=sorted(main_list,key=lambda x:x[1],reverse=True)
         for i in main_list:
             m_out_dir=os.path.join(out_dir,f'main_{i[0]}_s{np.round(i[1])}')
-            data=pa.pocketsinfo.GetMainBestConf(i[0],reserve_num=reserve_num,percentile=percentile,is_use_scoring=is_use_scoring)
+            data=pa.pocketsinfo.GetMainBestConf(i[0],reserve_num=reserve_num)
             PAHelper._WriteBestFrames(pa,m_out_dir,data,frame_shift=frame_shift,vol_v_time=False)
 
     @staticmethod
@@ -807,35 +817,34 @@ class PAHelper:
             size+=len(v[2])
         out=np.zeros((size,pa.size()))-1
         main_list=list(pa.pocketsinfo._pocket_composition.values())
-        main_list=sorted(main_list,key=lambda x:x[1],reverse=True)
+        main_list=sorted(main_list,key=lambda x:x[1])
         mg_v_t=np.zeros((len(main_list),pa.size()))
         for i in range(len(main_list)):
             mg_v_t[i][main_list[i][-1]]=i
         mg_v_t-=1
-        np.savetxt(os.path.join(out_dir,mg_v_t_f),pgroup_v_time.transpose(),fmt='%6.3f',delimiter=',')
-        count=0
+        np.savetxt(os.path.join(out_dir,mg_v_t_f),mg_v_t.transpose(),fmt='%6.3f',delimiter=',')
         for i in main_list[::-1]:
-            count+=len(pa.pocketsinfo._pocket_composition[i[0]][2])
-            main_name.append([i[0],count])
-        count=0
+            main_name.append([i[0],len(pa.pocketsinfo._pocket_composition[i[0]][-1])])
         with open(os.path.join(out_dir,main_file),'w') as f:
+            f.writelines('#main_name,lifetime\n')
             for i in main_name:
                 f.writelines(f'{i[0]},{i[1]}\n')
 
     @staticmethod
     def WtriteMainTransProb(pa:PocketsAnalysis,out_dir:str,**kw)->None:
-        frame_cutoff=kw.get('frame_cutoff',0)
         mtp_name_file=kw.get('name_file','MTP_name_list.dat')
         mtp_matrix_file=kw.get('matrix_file','MTP_matrix.dat')
+        mtp_norm_matrix_file=kw.get('matrix_file','MTP_norm_matrix.dat')
 
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
 
-        name_list,life_time,matrix=pa.pocketsinfo.MainPocketTransProbAnalysis(frame_cutoff=frame_cutoff)
+        name_list,life_time,matrix,norm_m=pa.pocketsinfo.MainPocketTransProbAnalysis()
         with open(os.path.join(out_dir,mtp_name_file),'w') as f:
             for i in range(len(name_list)):
                 f.writelines(f'{name_list[i]} {life_time[i]}\n')
         np.savetxt(os.path.join(out_dir,mtp_matrix_file),matrix)
+        np.savetxt(os.path.join(out_dir,mtp_norm_matrix_file),norm_m)
 
     @staticmethod
     def WritePocketInfos(pa:PocketsAnalysis,out_dir:str,**kw)->None:
@@ -892,6 +901,30 @@ class PAHelper:
             for i in range(pa.pocketsinfo.GetPocketNum()):
                 f.writelines(f"{i:>5d} {prank[i]+1:>5d} {pscore[i]:>10.4f} {pa.pocketsinfo.GetLifeTime(i):>10d} {pa.pocketsinfo.GetMedianVol(i):>10.4f} {pa.pocketsinfo.GetMaxVol(i):>10.4f} {pa.pocketsinfo.GetMinVol(i):>10.4f} {pa.pocketsinfo.GetVolumeFluctuations(i,80)[-1]:>10.4F} {pa.pocketsinfo.GetMeanOccRatio(i):>10.4f} {pa.pocketsinfo.GetMeanNPR(i):>10.4f} {np.sqrt(pa.pocketsinfo.GetMSENPR(i,80)):>10.4f}\n")
 
+def ParserGeneral(md)->dict:
+    out={'dist_cutoff':3.0,
+         'is_use_score':True,
+         'score_cutoff':10.0,
+         'percentile':80}
+    keys=md.keys()
+    if 'dist_cutoff' in keys:
+        out['dist_cutoff']=float(md['dist_cutoff'])
+        print(f"Set dist_cutoff={float(md['dist_cutoff'])} done.")
+    
+    if 'is_use_score' in keys:
+        out['is_use_score']=bool(md['is_use_score'])
+        print(f"Set is_use_score={bool(md['is_use_score'])} done.")
+
+    if 'score_cutoff' in keys:
+        out['score_cutoff']=float(md['score_cutoff'])
+        print(f"Set score_cutoff={float(md['score_cutoff'])} done.")
+
+    if 'percentile' in keys:
+        out['percentile']=int(md['percentile'])
+        print(f"Set percentile={int(md['percentile'])} done.")
+    
+    return out
+
 def ParserBox(input:List[str])->Tuple[List[List[int]],List[List[float]]]:
     atom_id=[]
     length=[]
@@ -922,7 +955,7 @@ def ParserMask(protein:mdtraj.Trajectory,instr:str,mode:str='all')->List[int]:
         atomid=[atom.index for atom in protein.topology.atoms if (atom.residue.index in resid and atom.name in ['CA','C','N'])]
     return atomid
 
-def GetPA(md)->PocketsAnalysis:
+def GetPA(md,gparam)->PocketsAnalysis:
     print('Read traj file...',end='')
     if not os.path.exists(md['top']):
             print(f'The topology file does not exist! ({md["top"]})')
@@ -971,6 +1004,11 @@ def GetPA(md)->PocketsAnalysis:
         pa.SetBox(atom_id,box_length)
         print(f'{"done":>8s}.\n')
 
+    pa.SetDistCutoff(gparam['dist_cutoff'])
+    pa.isUseScore(gparam['is_use_score'])
+    pa.SetScoreCutoff(gparam['score_cutoff'])
+    pa.SetPercentile(gparam['percentile'])
+
     return pa
 
 def WriteFiles(pa:PocketsAnalysis,md)->None:
@@ -1016,7 +1054,7 @@ parser = argparse.ArgumentParser(
                     formatter_class=SmartFormatter,
                     description='Analyzing protein pocket features in molecular dynamics simulations trajectories.')
 
-parser.add_argument('-v,--version', action='version', version='%(prog)s 1.1.5')
+parser.add_argument('-v,--version', action='version', version='%(prog)s 1.2.0')
 parser.add_argument('--top', type=str,metavar='Path_to_your_topology_file',default='',
                     help='This parameter specifies the path to your topology file.')
 parser.add_argument('--traj', type=str,metavar='Path_to_your_traj_file',default='',
@@ -1059,10 +1097,11 @@ parser.add_argument('--out_coex',type=bool,metavar='bool, default=False',default
 parser.add_argument('--out_group',type=bool,metavar='bool, default=False',default=False,help='Control whether to output sub pocket correlation matrix')
 parser.add_argument('--out_mtp',type=bool,metavar='bool, default=False',default=False,help='Control whether to output main group transformation probability matrix')
 
+parser.add_argument('--is_use_score',type=bool,default=True,metavar='integer, default=10, unit: frame',help='Whether to use pocket scoring function when calculating the optimal conformation. If it is not, the pocket volume will be used to rate the pocket.')
+parser.add_argument('--percentile',type=int,help='Set n hyperparameters for pocket fluctuation.An integer with values ranging from 0 to 100.defaule=80')
+parser.add_argument('--score_cutoff',type=int,help='Score below score_ Cutoff sub pockets will not be included in the pocket scoring calculation. The default is 10.0.')
 parser.add_argument('--best_num',type=int,default=10,metavar='integer, default=10',help='Maximum number of best conformation retention')
-parser.add_argument('--best_use_score',type=bool,default=True,metavar='integer, default=10, unit: frame',help='Whether to use pocket scoring function when calculating the optimal conformation. If it is not, the pocket volume will be used to rate the pocket.')
 parser.add_argument('--main_num',type=int,default=1,help='Maximum number of best main group conformation retention.')
-parser.add_argument('--main_use_score',type=bool,default=True,metavar='bool, default=True',help='Whether to use pocket scoring function when calculating the optimal main group conformation.')
 parser.add_argument('--pock_info_ftype',type=str,choices=['npy','txt'],default='npy',help='The file format for pocket information, default to npy.')
 parser.add_argument('--coex_sort_by',type=str,default='id',choices=['id','rank'],help='In what order are the rows and columns of the coex matrix arranged')
 parser.add_argument('--corr_sort_by',type=str,default='id',choices=['id','rank'],help='In what order are the rows and columns of the corr matrix arranged')
@@ -1088,10 +1127,11 @@ if __name__=='__main__':
         config={'GENERAL':vars(args),'MODEL0':vars(args)}
         config['GENERAL']['mode']='single'
 
+    gparam=ParserGeneral(config['GENERAL'])
+
     if config['GENERAL']['mode']=='single':
         print('single mode')
-        pa=GetPA(config['MODEL0'])
-        pa.SetDistCutoff(float(config['GENERAL'].get('dist_cutoff','3.0')))
+        pa=GetPA(config['MODEL0'],gparam)
         ts=int(config[f'MODEL0'].get('frame_start','0'))
         te=int(config[f'MODEL0'].get('frame_stop','-1'))
         to=int(config[f'MODEL0'].get('frame_offset','1'))
@@ -1109,7 +1149,7 @@ if __name__=='__main__':
                 print(f'MODEL{i}')
                 # for k,v in config[f'MODEL{i}'].items():
                 #     print(f'{k} : {v}')
-                models.AddPA(GetPA(config[f'MODEL{i}']))
+                models.AddPA(GetPA(config[f'MODEL{i}'],gparam))
                 if not 'align_mask' in config[f'MODEL{i}']:
                     print('error! align_mask not set')
                     exit()
