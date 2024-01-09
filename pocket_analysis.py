@@ -473,8 +473,8 @@ class PocketsInfo:
 class PocketsAnalysis:
     def __init__(self,rec:mdtraj.Trajectory,rec_mask:List[int]=[],lig_mask:List[int]=[],**kw) -> None:
         self.rec:mdtraj.Trajectory=rec
-        self.lig_mask:np.ndarray=np.array(lig_mask)
-        self.rec_mask:np.ndarray=np.array(rec_mask)
+        self.lig_mask:np.ndarray=np.array(lig_mask,dtype=int)
+        self.rec_mask:np.ndarray=np.array(rec_mask,dtype=int)
         if self.lig_mask.shape[0]!=0:
             self.lig_mask-=1
         if self.rec_mask.shape[0]==0:
@@ -483,7 +483,7 @@ class PocketsAnalysis:
         else:
             self.rec_mask-=1
         
-        rec=rec.superpose(rec,0)
+        rec=rec.superpose(rec,0,rec_mask)
         self.snap_shots=SnapShots(rec)
         self.pocketsinfo=PocketsInfo()
         self.distance_cutoff:float=3.0
