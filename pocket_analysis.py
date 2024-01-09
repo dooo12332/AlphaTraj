@@ -820,7 +820,7 @@ class PAHelper:
         main_list=sorted(main_list,key=lambda x:x[1])
         mg_v_t=np.zeros((len(main_list),pa.size()))
         for i in range(len(main_list)):
-            mg_v_t[i][main_list[i][-1]]=i
+            mg_v_t[i][main_list[i][-1]]=i+1
         mg_v_t-=1
         np.savetxt(os.path.join(out_dir,mg_v_t_f),mg_v_t.transpose(),fmt='%6.3f',delimiter=',')
         for i in main_list[::-1]:
