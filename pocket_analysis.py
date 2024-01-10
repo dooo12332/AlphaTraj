@@ -1156,10 +1156,11 @@ if __name__=='__main__':
     if config['GENERAL']['mode']=='single':
         print('single mode')
         pa=GetPA(config['MODEL0'],gparam)
-        ts=int(config[f'MODEL0'].get('frame_start','0'))
-        te=int(config[f'MODEL0'].get('frame_stop','-1'))
-        to=int(config[f'MODEL0'].get('frame_offset','1'))
-        pa.Analysis(ts,te,to)
+        if not 'unpickle' in config['MODEL0'].keys():
+            ts=int(config[f'MODEL0'].get('frame_start','0'))
+            te=int(config[f'MODEL0'].get('frame_stop','-1'))
+            to=int(config[f'MODEL0'].get('frame_offset','1'))
+            pa.Analysis(ts,te,to)
         WriteFiles(pa,config['MODEL0'])
         Serializing(pa,config['MODEL0'])
     elif config['GENERAL']['mode']=='multi':
