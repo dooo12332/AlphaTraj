@@ -2,6 +2,7 @@
 import os
 import sys
 import argparse
+import pickle
 import alphaspace2 as al
 from alphaspace2 import Snapshot as ss
 from typing import List,Union,Dict,Tuple
@@ -956,6 +957,16 @@ def ParserMask(protein:mdtraj.Trajectory,instr:str,mode:str='all')->List[int]:
     return atomid
 
 def GetPA(md,gparam)->PocketsAnalysis:
+    if 'unpickle' in md.keys() and len(md['unpickle'])!=0:
+        print('Start deserializing data...',end='')
+        ppath=md['unpickle']
+        if not os.path.exists(ppath):
+            print(f"file dose not exist! ({ppath})")
+        with open(ppath,'rb') as f:
+            pa=pickle.load(f)
+        print(f'{"done":>8s}.')
+        return pa
+
     print('Read traj file...',end='')
     if not os.path.exists(md['top']):
             print(f'The topology file does not exist! ({md["top"]})')
@@ -1042,6 +1053,16 @@ def WriteFiles(pa:PocketsAnalysis,md)->None:
         PAHelper.WtriteMainTransProb(pa,os.path.join(out_dir,'pock_info/'),frame_cutoff=float(md.get('main_mtp_cutoff','10')))
         print(f'{"done":>8s}.\n')
 
+def Serializing(pa,md)->None:
+    if 'pickle' in md.keys() and len(md['pickle'])!=0:
+        print('Start serializing data...',end='')
+        ppath=md['pickle']
+        if not os.path.exists(os.path.dirname(ppath)):
+            print(f"dir dose not exist! ({os.path.dirname(ppath)})")
+        with open(ppath,'wb') as f:
+            pickle.dump(pa,f)
+        print(f'{"done":>8s}.')
+
 #%%arg parser
 class SmartFormatter(argparse.HelpFormatter):
     def _split_lines(self, text: str, width: int):
@@ -1108,7 +1129,10 @@ parser.add_argument('--corr_sort_by',type=str,default='id',choices=['id','rank']
 
 parser.add_argument('--config',type=str,default='',help='Specify the path to the control file. When this parameter is specified, all input information will be read from the control file. Other command line input parameters will be ignored')
 
-#%%
+parser.add_argument('--pickle',type=str,help='')
+parser.add_argument('--unpickle',type=str,help='')
+
+#%% run
 if __name__=='__main__':
     if len(sys.argv)==1:
         parser.parse_args(['-h'])
@@ -1137,6 +1161,7 @@ if __name__=='__main__':
         to=int(config[f'MODEL0'].get('frame_offset','1'))
         pa.Analysis(ts,te,to)
         WriteFiles(pa,config['MODEL0'])
+        Serializing(pa,config['MODEL0'])
     elif config['GENERAL']['mode']=='multi':
         print('multi mode')
         models=ModelGroup()
