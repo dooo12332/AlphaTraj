@@ -299,6 +299,11 @@ class Snapshot:
         self._alpha_space_nonpolar_ratio=np.array(new_alpha_space_nonpolar_ratio) 
         #print(f'done.[{osize}]->[{self._alpha_space.shape[0]}]')
 
+    def Transform(self,T:np.ndarray):
+        if T.shape[0]==1 and T.shape[1]==3:
+            self._alpha_xyz-=T
+            self._pocket_xyz-=T
+
     def Rotate(self,R:np.ndarray)->bool:
         if R.shape[0]==3 and R.shape[1]==3:
             self._alpha_xyz@=R
