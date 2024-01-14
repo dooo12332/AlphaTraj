@@ -9,6 +9,7 @@ from typing import List,Union,Dict,Tuple
 import mdtraj
 import numpy as np
 from scipy.cluster.hierarchy import fcluster, linkage
+from scipy.linalg import orthogonal_procrustes
 from configparser import ConfigParser
 from tqdm import tqdm, trange
 #%% process class
@@ -484,7 +485,7 @@ class PocketsAnalysis:
         else:
             self.rec_mask-=1
         
-        rec=rec.superpose(rec,0,rec_mask)
+        self.rec.superpose(rec,0,rec_mask)
         self.snap_shots=SnapShots(rec)
         self.pocketsinfo=PocketsInfo()
         self.distance_cutoff:float=3.0
@@ -541,6 +542,23 @@ class PocketsAnalysis:
                     tiscontact=self.snap_shots[i]._alpha_contact[taids]
                     self.pocketsinfo._pocket_occupancy_v_time[tpids[j],i]+=np.sum(taspace[tiscontact])
         
+    def _rotateMatrix(self,M:np.ndarray,N:np.ndarray)->np.ndarray:
+        center_M = M - np.mean(M, axis=0)
+        center_N = N - np.mean(N, axis=0)
+        R, _ = orthogonal_procrustes(center_M, center_N)
+        return R
+
+    def Align(self,coord:np.ndarray,mask:np.ndarray):
+        if coord.shape[1]!=mask.shape[0]:
+            print('Atom number mismatch!')
+            return
+        for i in range(self.size()):
+            N=self.rec.xyz[i,mask,:]
+            R=self._rotateMatrix(coord,N)
+            self.rec.xyz[i]-=np.mean(N,axis=0)
+            self.rec.xyz[i]@=R
+            self.snap_shots[i].Rotate(R)
+
     def SetBox(self,center_atom_id:List[List[int]],length:List[List[float]]):
         if len(center_atom_id)!=len(length):
             print('Input parameter dimension mismatch!')
