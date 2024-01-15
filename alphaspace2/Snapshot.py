@@ -39,7 +39,8 @@ class Snapshot:
 
         self._beta_dpocket_index = None
 
-        self._pocket_xyz = None#LIST[np.ndarray]
+        #self._pocket_xyz:List[np.ndarray] = []#LIST[np.ndarray]
+        self._pocket_xyz:np.ndarray
         self._pocket_space = None#LIST[float]
         self._pocket_contact = None
 
@@ -134,12 +135,13 @@ class Snapshot:
         alpha_pocket_label = fcluster(zmat, self.pocket_cluster_dist, criterion='distance') - 1
 
         self._pocket_alpha_index_list = _group(alpha_pocket_label)
-        self._pocket_xyz = [None] * (max(alpha_pocket_label) + 1)
+        pxyz = [None] * (max(alpha_pocket_label) + 1)
         self._pocket_space = [None] * (max(alpha_pocket_label) + 1)
 
         for i, indices in enumerate(self._pocket_alpha_index_list):
-            self._pocket_xyz[i] = np.mean(self._alpha_xyz[indices], axis=0)
+            pxyz[i] = np.mean(self._alpha_xyz[indices], axis=0)
             self._pocket_space[i] = np.sum(self._alpha_space[indices], axis=0)
+        self._pocket_xyz=np.stack(pxyz,axis=0)
 
     def genBScore(self, receptor,frame=0,rec_mask:np.ndarray=np.array([])):
         from .VinaScoring import _pre_process_pdbqt, _get_probe_score
@@ -207,10 +209,11 @@ class Snapshot:
 
             self._pocket_contact = np.array(
                 [np.any(self._alpha_contact[alpha_indices]) for alpha_indices in self._pocket_alpha_index_list])
+        
 
     @property
     def pockets(self):
-        for i in range(len(self._pocket_xyz)):
+        for i in range(self._pocket_xyz.shape[0]):
             yield _Pocket(self, i)
 
     @property
@@ -299,14 +302,14 @@ class Snapshot:
         self._alpha_space_nonpolar_ratio=np.array(new_alpha_space_nonpolar_ratio) 
         #print(f'done.[{osize}]->[{self._alpha_space.shape[0]}]')
 
-    def Transform(self,T:np.ndarray):
+    def Translation(self,T:np.ndarray):
         if T.shape[0]==1 and T.shape[1]==3:
-            self._alpha_xyz-=T
-            self._pocket_xyz-=T
+            self._alpha_xyz+=T
+            self._pocket_xyz+=T
 
     def Rotate(self,R:np.ndarray)->bool:
         if R.shape[0]==3 and R.shape[1]==3:
-            self._alpha_xyz@=R
-            self._pocket_xyz@=R
+            self._alpha_xyz=self._alpha_xyz@R
+            self._pocket_xyz=self._pocket_xyz@R
             return True
         return False
