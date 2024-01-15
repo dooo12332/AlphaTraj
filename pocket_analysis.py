@@ -92,6 +92,7 @@ class PocketsInfo:
         self._pocket_composition_v_time:np.ndarray
         self._pocket_main_group_v_time:List[List[int]]=[]
         self._pocket_sub_group_v_time:List[List[int]]=[]
+        #self._pocket_xyz:Dict[int,np.ndarray]={}#ingore invalid sub-pocket,{pid,n*3 array}
         self._total_score_v_time:np.ndarray
         self.fluc_range:np.ndarray
 
@@ -505,8 +506,8 @@ class PocketsAnalysis:
         total_coords=[]
         #Extract pocket coordinates
         for ss in self.snap_shots.sslist:
-            total_coords.extend(ss._pocket_xyz)
-        total_coords=np.array(total_coords)
+            total_coords.append(ss._pocket_xyz)
+        total_coords=np.concatenate(total_coords,axis=0)
         #pocket clustering
         self.pocketsinfo._pockets_cluter_id=fcluster(linkage(total_coords, method='average'), self.distance_cutoff,criterion='distance')
         self.pocketsinfo._pockets_cluter_id-=1
@@ -542,6 +543,20 @@ class PocketsAnalysis:
                     tiscontact=self.snap_shots[i]._alpha_contact[taids]
                     self.pocketsinfo._pocket_occupancy_v_time[tpids[j],i]+=np.sum(taspace[tiscontact])
         
+    def GetPocketXYZ(self,pid:int)->np.ndarray:
+        out=[]
+        for i in range(len(self.snap_shots.sslist)):
+            tpids=self.pocketsinfo._pocket_cluster_splited[i]#tmp pockets index tpids:pock index list
+            if pid in tpids:
+                tpids_count=np.bincount(tpids)
+                parg=np.argwhere(tpids==pid)
+                tcoord=np.zeros((1,3),dtype=float)
+                for j in parg:
+                    tcoord+=self.snap_shots[i]._pocket_xyz[j]
+                tcoord/=tpids_count[pid]
+                out.append(tcoord)
+        return np.concatenate(out,axis=0)
+
     def _rotateMatrix(self,M:np.ndarray,N:np.ndarray)->np.ndarray:
         center_M = M - np.mean(M, axis=0)
         center_N = N - np.mean(N, axis=0)
@@ -549,15 +564,22 @@ class PocketsAnalysis:
         return R
 
     def Align(self,coord:np.ndarray,mask:np.ndarray):
-        if coord.shape[1]!=mask.shape[0]:
+        if coord.shape[0]!=mask.shape[0]:
             print('Atom number mismatch!')
             return
+        N=self.rec.xyz[0,mask,:]
+        R=self._rotateMatrix(N,coord)
+        T=-np.mean(N,axis=0)
+        Ta=T*10
         for i in range(self.size()):
-            N=self.rec.xyz[i,mask,:]
-            R=self._rotateMatrix(coord,N)
-            self.rec.xyz[i]-=np.mean(N,axis=0)
-            self.rec.xyz[i]@=R
-            self.snap_shots[i].Rotate(R)
+            self.rec.xyz[i]+=T
+            self.rec.xyz[i]=self.rec.xyz[i]@R
+            self.snap_shots[i]._alpha_xyz+=Ta
+            self.snap_shots[i]._alpha_xyz=self.snap_shots[i]._alpha_xyz@R
+            self.snap_shots[i]._pocket_xyz+=Ta
+            self.snap_shots[i]._pocket_xyz=self.snap_shots[i]._pocket_xyz@R
+            #self.snap_shots[i].Translation(T)
+            #self.snap_shots[i].Rotate(R)
 
     def SetBox(self,center_atom_id:List[List[int]],length:List[List[float]]):
         if len(center_atom_id)!=len(length):
@@ -635,15 +657,11 @@ class PocketsAnalysis:
 class ModelGroup:
     def __init__(self,**kw) -> None:
         self.pa_list:List[PocketsAnalysis]=[]
+        self.need_analysis:List[int]=[]
         self.distance_cutoff=kw.get('disCutoff',3.0)
 
     def __getitem__(self,id:int)->PocketsAnalysis:
         return self.pa_list[id]
-
-    def SetDistCutoff(self,distance:float):
-        self.distance_cutoff=distance
-        for pa in self.pa_list:
-            pa.SetDistCutoff(distance)
 
     def size(self)->int:
         return len(self.pa_list)
@@ -660,48 +678,50 @@ class ModelGroup:
     def GetModel(self,sid:int)->PocketsAnalysis:
         return self.pa_list[sid]
 
-    def AlignModel(self,rec_mask:List[List[int]])->None:
+    def AlignModel(self,align_mask:List[np.ndarray])->None:
         '''
-        rec_mask:[ [system1 atom indexs],   [system2 atom indexs] .....   ]
-        if len(rec_mask)==1 : All systems will apply the same mask
+        align_mask:[ [system1 atom indexs],   [system2 atom indexs] .....   ]
         '''
+        #center model 1
+        coord_ref=self.pa_list[0].rec.xyz[0,align_mask[0],:]
+        coord_refa=coord_ref*10
+        T=np.mean(coord_ref,axis=0)
+        Ta=T*10
+        coord_ref=self.pa_list[0].rec.xyz[0,align_mask[0],:]
+        for i in range(self.pa_list[0].size()):
+            self.pa_list[0].rec.xyz[i]-=T
+            self.pa_list[0].snap_shots[i]._alpha_xyz-=Ta
+            self.pa_list[0].snap_shots[i]._pocket_xyz-=Ta
+        #align model 2...
         for i in range(1,self.size()):
-            self.pa_list[i].snap_shots.rec.superpose(self.pa_list[0].snap_shots.rec,frame=0,ref_atom_indices=rec_mask[0],atom_indices=rec_mask[i])
+            self.pa_list[i].Align(coord_ref,align_mask[i])
 
-    def _ClusterPockets(self)->None:
-        total_coords=[]
-        #Extract pocket coordinates
+    def PocketMatch(self,score_cutoff:float=10.0,dist_cutoff=3.0):
+        tmcoord=[]
+        tmpid=[]
+        tmsplit=[]
         for pa in self.pa_list:
-            for ss in pa.snap_shots.sslist:
-                total_coords.extend(ss._pocket_xyz)
-        total_coords=np.array(total_coords)
-        #pocket clustering
-        pockets_cluter_id=fcluster(linkage(total_coords, method='average'), self.distance_cutoff,criterion='distance')
-        pockets_cluter_id-=1
-        system_frame_num=[pa.size() for pa in self.pa_list]
-        pockets_cluter_id_list=np.split(pockets_cluter_id,np.cumsum(system_frame_num))
-        for i in range(self.size()):
-            #print(f'len={len(pockets_cluter_id_list[i])}')
-            self.pa_list[i].pocketsinfo._pockets_cluter_id=pockets_cluter_id_list[i]
+            pa_pscore=pa.pocketsinfo.GetAllScore()
+            pa_pid=np.argwhere(pa_pscore>score_cutoff)
+            tmsplit.append(pa_pid.shape[0])
+            for pid in pa_pid:
+                pcoord=np.mean(pa.GetPocketXYZ(pid),axis=0)
+                print(f'pcoord({pcoord.shape})={pcoord}')
+                tmcoord.append(pcoord)
+                tmpid.append(pid)
+        tmcoord=np.stack(tmcoord,axis=0)
+        print(f'tmcoord({tmcoord.shape})={tmcoord}')
+        cid=fcluster(linkage(tmcoord, method='average'), dist_cutoff,criterion='distance')
+        cid-=1
+        return (np.array(tmsplit),np.array(tmpid),cid)
+
+
 
     def Analysis(self,step:List[List[int]])->None:
-        for i in range(self.size()):
-            print(f'processing snap shots of MODEL{i}....     ')
-            self.pa_list[i].offset=step[i][2]
-            self.pa_list[i].snap_shots.Process(step[i][0],step[i][1],step[i][2],self.pa_list[i].rec_mask,self.pa_list[i].lig_mask)
-            print(' done.\n')
-        print('Clustering pockets...    ',end='')
-        self._ClusterPockets()
-        print(' done.')
-        for i in range(self.size()):
-            print(f'Analysing pockets of MODEL{i}...    ',end='')
-            self.pa_list[i]._PostProcessing()
-            print(f' done.\nScoring pockets of MODEL{i}...   ',end='')
-            self.pa_list[i].pocketsinfo._CalcPocketScore()
-            self.pa_list[i].pocketsinfo._CalaPocketRank()
-            self.pa_list[i].pocketsinfo._CalcTotalScoreVTime()
-            self.pa_list[i].pocketsinfo._PocketGrouppAnalysis()
-            print(' done.\n')
+        for i in self.need_analysis:
+            print(f'Analysis MODEL{i}....     ')
+            self.pa_list[i].Analysis(step[i][0],step[i][1],step[i][2])
+            print('Analysis done.\n')
 
 #%% helper class
 class PAHelper:
@@ -1093,7 +1113,7 @@ parser = argparse.ArgumentParser(
                     formatter_class=SmartFormatter,
                     description='Analyzing protein pocket features in molecular dynamics simulations trajectories.')
 
-parser.add_argument('-v,--version', action='version', version='%(prog)s 1.2.0')
+parser.add_argument('-v,--version', action='version', version='%(prog)s 1.2.1')
 parser.add_argument('--top', type=str,metavar='Path_to_your_topology_file',default='',
                     help='This parameter specifies the path to your topology file.')
 parser.add_argument('--traj', type=str,metavar='Path_to_your_traj_file',default='',
@@ -1184,7 +1204,6 @@ if __name__=='__main__':
     elif config['GENERAL']['mode']=='multi':
         print('multi mode')
         models=ModelGroup()
-        models.SetDistCutoff(float(config['GENERAL'].get('dist_cutoff','3.0')))
         align_id=[]
         step=[]
 
@@ -1194,19 +1213,27 @@ if __name__=='__main__':
                 # for k,v in config[f'MODEL{i}'].items():
                 #     print(f'{k} : {v}')
                 models.AddPA(GetPA(config[f'MODEL{i}'],gparam))
+                if not 'unpickle' in config[f'MODEL{i}'].keys():
+                    models.need_analysis.append(i)
                 if not 'align_mask' in config[f'MODEL{i}']:
                     print('error! align_mask not set')
                     exit()
-                align_id.append(ParserMask(models[i].rec,config[f'MODEL{i}'].get('align_mask').strip(),mode='bb'))
+                align_id.append(np.array(ParserMask(models[i].rec,config[f'MODEL{i}']['align_mask'].strip(),mode='bb'),dtype=int))
                 ts=int(config[f'MODEL{i}'].get('frame_start','0'))
                 te=int(config[f'MODEL{i}'].get('frame_stop','-1'))
                 to=int(config[f'MODEL{i}'].get('frame_offset','1'))
                 step.append([ts,te,to])
-        print('start align model...    ',end='')
-        models.AlignModel(align_id)  
-        print('done')
+        print('start process model...    ',end='')
         models.Analysis(step)
+        print('proces model done')
+        print('start align model')
+        models.AlignModel(align_id)  
+        print('align model done')
+        print('start match pocket')
+        models.AlignModel(align_id)  
+        print('match pocket done')
 
         for i in range(len(models.pa_list)):
             print(f'Write data of MODEL{i}')
             WriteFiles(models.pa_list[i],config[f'MODEL{i}'])
+            Serializing(models.pa_list[i],config[f'MODEL{i}'])
