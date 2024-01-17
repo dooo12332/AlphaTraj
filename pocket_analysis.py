@@ -1169,7 +1169,7 @@ At the same time, this can speed up the running of the program and reduce the me
 NOTE: To accommodate continuous changes in protein conformation, the box centers are set to the coordinates of a single atom or to the geometric centers of several atoms, 
 which allows the box coordinates to be synchronized with the conformational changes of the protein.
 Format: --box atom1_id,atom2_id length(X-axis direction),width(Y-axis direction),height(Z-axis direction)
-Example: --box 372 18,10,22 --box 458,963 14,12,20''')
+Example: --box 372 18,10,22 458,963 14,12,20''')
 
 parser.add_argument('--dist_cutoff',type=float,default=3.0,metavar='float, default=3.0',help='Distance cutoff value when clustering subpockets')
 
