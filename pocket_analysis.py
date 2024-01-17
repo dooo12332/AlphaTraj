@@ -174,7 +174,7 @@ class PocketsInfo:
         return out
 
     def _CalaPocketRank(self)->None:
-        all_p_rank=[[i,pa.pocketsinfo.GetScore(i)] for i in range(pa.pocketsinfo.GetPocketNum()) ]
+        all_p_rank=[[i,self.GetScore(i)] for i in range(self.GetPocketNum()) ]
         all_p_rank=np.array(sorted(all_p_rank,key=lambda x:x[1],reverse=True))[:,0].transpose()
         self._pocket_rank=np.zeros(self._pockets_score.shape[0],dtype=int)
         for i in range(len(all_p_rank)):
@@ -380,10 +380,10 @@ class PocketsInfo:
                 intersection=intersection[intersection==4].shape[0]
                 out[i,j]=out[j,i]=intersection/total_frame
         if score_cutoff>0:
-            out=out[pa.pocketsinfo.GetAllScore()>score_cutoff]
-            out=out[:,pa.pocketsinfo.GetAllScore()>score_cutoff]
-            pid=pid[pa.pocketsinfo.GetAllScore()>score_cutoff]
-            prank=prank[pa.pocketsinfo.GetAllScore()>score_cutoff]
+            out=out[self.GetAllScore()>score_cutoff]
+            out=out[:,self.GetAllScore()>score_cutoff]
+            pid=pid[self.GetAllScore()>score_cutoff]
+            prank=prank[self.GetAllScore()>score_cutoff]
         return (pid,prank,out)
 
     def PocketAcorrAnalysis(self,score_cutoff:float=.0)->Tuple[np.ndarray,np.ndarray,np.ndarray]:
@@ -397,10 +397,10 @@ class PocketsInfo:
                 povt=(self.GetVolVTime(j)[1::]-self.GetVolVTime(j)[:-1:])/(self.GetMaxVol(j)+1e-5)
                 out[i,j]=out[j,i]=np.sum(pivt*povt)/(np.linalg.norm(pivt)*np.linalg.norm(povt)+1e-5)
         if score_cutoff>0:
-            out=out[pa.pocketsinfo.GetAllScore()>score_cutoff]
-            out=out[:,pa.pocketsinfo.GetAllScore()>score_cutoff]
-            pid=pid[pa.pocketsinfo.GetAllScore()>score_cutoff]
-            prank=prank[pa.pocketsinfo.GetAllScore()>score_cutoff]
+            out=out[self.GetAllScore()>score_cutoff]
+            out=out[:,self.GetAllScore()>score_cutoff]
+            pid=pid[self.GetAllScore()>score_cutoff]
+            prank=prank[self.GetAllScore()>score_cutoff]
         return (pid,prank,out)
 
     def GetBestConf(self,reserve_num:int,percentile:int=80,is_use_scoring:bool=True):
@@ -549,7 +549,7 @@ class PocketsAnalysis:
             tpids=self.pocketsinfo._pocket_cluster_splited[i]#tmp pockets index tpids:pock index list
             if pid in tpids:
                 tpids_count=np.bincount(tpids)
-                parg=np.argwhere(tpids==pid)
+                parg=np.argwhere(tpids==pid).flatten()
                 tcoord=np.zeros((1,3),dtype=float)
                 for j in parg:
                     tcoord+=self.snap_shots[i]._pocket_xyz[j]
@@ -565,8 +565,8 @@ class PocketsAnalysis:
 
     def Align(self,coord:np.ndarray,mask:np.ndarray):
         if coord.shape[0]!=mask.shape[0]:
-            print('Atom number mismatch!')
-            return
+            print('Atom number mismatch! Unable to perform pocket matching, skip.',end='')
+            return False
         N=self.rec.xyz[0,mask,:]
         R=self._rotateMatrix(N,coord)
         T=-np.mean(N,axis=0)
@@ -580,6 +580,7 @@ class PocketsAnalysis:
             self.snap_shots[i]._pocket_xyz=self.snap_shots[i]._pocket_xyz@R
             #self.snap_shots[i].Translation(T)
             #self.snap_shots[i].Rotate(R)
+        return True
 
     def SetBox(self,center_atom_id:List[List[int]],length:List[List[float]]):
         if len(center_atom_id)!=len(length):
@@ -631,8 +632,7 @@ class PocketsAnalysis:
         serial=1
         piday=self.pocketsinfo._pocket_cluster_splited[frame]
         prank=[self.pocketsinfo._pocket_rank[i] for i in piday]
-        sort_id=np.argsort(prank)
-        piday=piday[sort_id]
+        #sort_id=np.argsort(prank)
         pxyz=self.snap_shots.sslist[frame]._pocket_xyz
         axyz=self.snap_shots.sslist[frame]._alpha_xyz
         #print(f'piday={piday}')
@@ -684,7 +684,6 @@ class ModelGroup:
         '''
         #center model 1
         coord_ref=self.pa_list[0].rec.xyz[0,align_mask[0],:]
-        coord_refa=coord_ref*10
         T=np.mean(coord_ref,axis=0)
         Ta=T*10
         coord_ref=self.pa_list[0].rec.xyz[0,align_mask[0],:]
@@ -694,7 +693,9 @@ class ModelGroup:
             self.pa_list[0].snap_shots[i]._pocket_xyz-=Ta
         #align model 2...
         for i in range(1,self.size()):
+            print(f'Align model{i}...',end='')
             self.pa_list[i].Align(coord_ref,align_mask[i])
+            print(f'{"done":>8s}.')
 
     def PocketMatch(self,score_cutoff:float=10.0,dist_cutoff=3.0):
         tmcoord=[]
@@ -702,20 +703,16 @@ class ModelGroup:
         tmsplit=[]
         for pa in self.pa_list:
             pa_pscore=pa.pocketsinfo.GetAllScore()
-            pa_pid=np.argwhere(pa_pscore>score_cutoff)
+            pa_pid=np.argwhere(pa_pscore>score_cutoff).flatten()
             tmsplit.append(pa_pid.shape[0])
             for pid in pa_pid:
                 pcoord=np.mean(pa.GetPocketXYZ(pid),axis=0)
-                print(f'pcoord({pcoord.shape})={pcoord}')
                 tmcoord.append(pcoord)
                 tmpid.append(pid)
         tmcoord=np.stack(tmcoord,axis=0)
-        print(f'tmcoord({tmcoord.shape})={tmcoord}')
         cid=fcluster(linkage(tmcoord, method='average'), dist_cutoff,criterion='distance')
         cid-=1
         return (np.array(tmsplit),np.array(tmpid),cid)
-
-
 
     def Analysis(self,step:List[List[int]])->None:
         for i in self.need_analysis:
@@ -753,12 +750,12 @@ class PAHelper:
             tmp=sorted(tmp,key=lambda x:x[1],reverse=True)
             info.append(tmp)
             pa.WritePockets(out[i][0],os.path.join(pdb_dir,f'apocket-r{i+1:03d}.pdb'))
-            pa.rec[frame_shift+out[i][0]].save(os.path.join(pdb_dir,f'protein-r{i+1:03d}-f{frame_shift+out[i][0]*pa.offset+1:05d}.pdb'))
+            pa.rec[frame_shift+out[i][0]].save(os.path.join(pdb_dir,f'protein-r{i+1:03d}-f{frame_shift+out[i][0]*pa.offset:05d}.pdb'))
         with open(os.path.join(out_dir,'out.dat'),'w') as f:
             for i in range(len(out)):
                 if out[i][0]==-1:
                     continue
-                f.writelines(f'rank={i+1} frame={out[i][0]*pa.offset+frame_shift+1:6d} pock_score={out[i][1]:10.3f} pock_space={out[i][2]} main_name={out[i][3]} minor_name={out[i][4]}\n{"id":^3s} {"rank":^4s} {"socre":^6s} {"space":^7s} {"mnpr%80":^8s} {"occu":^6s} {"m_occu":^6s}\n')
+                f.writelines(f'rank={i+1} frame={out[i][0]*pa.offset+frame_shift:6d} pock_score={out[i][1]:10.3f} pock_space={out[i][2]} main_name={out[i][3]} minor_name={out[i][4]}\n{"id":^3s} {"rank":^4s} {"socre":^6s} {"space":^7s} {"mnpr%80":^8s} {"occu":^6s} {"m_occu":^6s}\n')
                 for j in info[i]:
                     f.writelines(f'{j[0]:3d} {pock_rank[j[0]]+1:4d} {j[1]:6.2f} {j[2]:7.2f} {pa.pocketsinfo.GetMeanNPR(j[0],80)*100:8.2f} {pa.pocketsinfo.GetOccupancyRatio(j[0],out[i][0]):6.4f} {mean_occu[j[0]]:6.4f}\n')
                 f.writelines('\n\n')
@@ -940,6 +937,40 @@ class PAHelper:
             for i in range(pa.pocketsinfo.GetPocketNum()):
                 f.writelines(f"{i:>5d} {prank[i]+1:>5d} {pscore[i]:>10.4f} {pa.pocketsinfo.GetLifeTime(i):>10d} {pa.pocketsinfo.GetMedianVol(i):>10.4f} {pa.pocketsinfo.GetMaxVol(i):>10.4f} {pa.pocketsinfo.GetMinVol(i):>10.4f} {pa.pocketsinfo.GetVolumeFluctuations(i,80)[-1]:>10.4F} {pa.pocketsinfo.GetMeanOccRatio(i):>10.4f} {pa.pocketsinfo.GetMeanNPR(i):>10.4f} {np.sqrt(pa.pocketsinfo.GetMSENPR(i,80)):>10.4f}\n")
 
+class MGHelper:
+    @staticmethod
+    def WritePocketPair(mg:ModelGroup,file_path:str,**kw)->None:
+        fdir=os.path.dirname(file_path)
+        if not os.path.exists(fdir):
+            print('Directory does not exist, create directory...',end='')
+            os.makedirs(fdir)
+            print('done',end='')
+        pnum,opid,pcluster=mg.PocketMatch(dist_cutoff=2.5)
+        pcumnum=np.cumsum(pnum)
+        cluster_num=int(np.max(pcluster))
+        pcluster_s=np.split(pcluster,pcumnum)
+        opid_s=np.split(opid,pcumnum)
+        model_num=len(mg.pa_list)
+        with open(file_path,'w') as f:
+            out='#'
+            for i in range(model_num):
+                out+=f'model{i},'
+            f.writelines(out[:-1]+'\n')
+            for i in range(cluster_num):
+                out=''
+                for j in range(model_num):
+                    tpid=-1
+                    if i in pcluster_s[j]:
+                        tpid=mg.pa_list[j].pocketsinfo.GetRank(opid_s[j][np.argwhere(pcluster_s[j]==i).item()])
+                    out+=f'{tpid},'
+                f.writelines(out[:-1]+'\n')
+
+def str2bool(s:str)->bool:
+    t=s.lower()
+    if t!='true' and t!='false':
+        print(f'wrong input \'{t}\'')
+    return t=='true'
+
 def ParserGeneral(md)->dict:
     out={'dist_cutoff':3.0,
          'is_use_score':True,
@@ -1062,31 +1093,31 @@ def GetPA(md,gparam)->PocketsAnalysis:
 
 def WriteFiles(pa:PocketsAnalysis,md)->None:
     out_dir=md['out']
-    if bool(md.get('out_best','True')):
+    if str2bool(md.get('out_summary','True')):
         print('Write sub-pocket info...',end='')
         PAHelper.WriteSummaryInfo(pa,os.path.join(out_dir,'pock_info'))
         print(f'{"done":>8s}.')
-    if bool(md.get('out_best','True')):
+    if str2bool(md.get('out_best','True')):
         print('Write best conformation...',end='')
-        PAHelper.WriteBestFrames(pa,os.path.join(out_dir,'pock_info/best_conf'),life_time_coutoff=int(md.get('best_lt_cutoff','10')),frame_shift=int(md.get('frame_start','0')),reserve_num=int(md.get('best_num','10')),is_use_scoring=bool(md.get('best_use_score','True')))
+        PAHelper.WriteBestFrames(pa,os.path.join(out_dir,'pock_info/best_conf'),life_time_coutoff=int(md.get('best_lt_cutoff','10')),frame_shift=int(md.get('frame_start','0')),reserve_num=int(md.get('best_num','10')),is_use_scoring=str2bool(md.get('best_use_score','True')))
         print(f'{"done":>8s}.')
-    if bool(md.get('out_pock_info','False')):
+    if str2bool(md.get('out_pock_info','False')):
         print('Write pocket information...',end='')
         PAHelper.WritePocketInfos(pa,os.path.join(out_dir,'pock_info/'),ftype=md.get('pock_info_ftype','npy'))
         print(f'{"done":>8s}.')
-    if bool(md.get('out_main_best','False')):
+    if str2bool(md.get('out_main_best','False')):
         print('Write main group...',end='')
-        PAHelper.WriteMainBestFrames(pa,os.path.join(out_dir,'pock_info/main_group'),life_time_coutoff=int(md.get('main_lt_cutoff','10')),frame_shift=int(md.get('frame_start','0')),reserve_num=int(md.get('main_num','1')),is_use_scoring=bool(md.get('main_use_score','True')))
+        PAHelper.WriteMainBestFrames(pa,os.path.join(out_dir,'pock_info/main_group'),life_time_coutoff=int(md.get('main_lt_cutoff','10')),frame_shift=int(md.get('frame_start','0')),reserve_num=int(md.get('main_num','1')),is_use_scoring=str2bool(md.get('main_use_score','True')))
         print(f'{"done":>8s}.')
-    if bool(md.get('out_coex','True')):
+    if str2bool(md.get('out_coex','False')):
         print('Write coexist & correlation matrix...',end='')
         PAHelper.WritePocketAccor(pa,os.path.join(out_dir,'pock_info/'),score_cutoff=float(md.get('score_cutoff','10')),coex_sort_by=md.get('coex_sort_by','id'),corr_sort_by=md.get('corr_sort_by','id'))
         print(f'{"done":>8s}.')
-    if bool(md.get('out_group','True')):
+    if str2bool(md.get('out_group','False')):
         print('Write group info...',end='')
         PAHelper.WriteGroupVtime(pa,os.path.join(out_dir,'pock_info/'))
         print(f'{"done":>8s}.')
-    if bool(md.get('out_mtp','True')):
+    if str2bool(md.get('out_mtp','False')):
         print('Write main group transformation probability matrix...',end='')
         PAHelper.WtriteMainTransProb(pa,os.path.join(out_dir,'pock_info/'),frame_cutoff=float(md.get('main_mtp_cutoff','10')))
         print(f'{"done":>8s}.\n')
@@ -1113,7 +1144,7 @@ parser = argparse.ArgumentParser(
                     formatter_class=SmartFormatter,
                     description='Analyzing protein pocket features in molecular dynamics simulations trajectories.')
 
-parser.add_argument('-v,--version', action='version', version='%(prog)s 1.2.1')
+parser.add_argument('-v,--version', action='version', version='%(prog)s 1.2.2')
 parser.add_argument('--top', type=str,metavar='Path_to_your_topology_file',default='',
                     help='This parameter specifies the path to your topology file.')
 parser.add_argument('--traj', type=str,metavar='Path_to_your_traj_file',default='',
@@ -1157,8 +1188,8 @@ parser.add_argument('--out_group',type=bool,metavar='bool, default=False',defaul
 parser.add_argument('--out_mtp',type=bool,metavar='bool, default=False',default=False,help='Control whether to output main group transformation probability matrix')
 
 parser.add_argument('--is_use_score',type=bool,default=True,metavar='integer, default=10, unit: frame',help='Whether to use pocket scoring function when calculating the optimal conformation. If it is not, the pocket volume will be used to rate the pocket.')
-parser.add_argument('--percentile',type=int,help='Set n hyperparameters for pocket fluctuation.An integer with values ranging from 0 to 100.defaule=80')
-parser.add_argument('--score_cutoff',type=int,help='Score below score_ Cutoff sub pockets will not be included in the pocket scoring calculation. The default is 10.0.')
+parser.add_argument('--percentile',type=int,help='Characterize the value of hyperparameter n in the sub pocket fluctuation amplitude function. An integer with values ranging from 0 to 100, defaulting to 80')
+parser.add_argument('--score_cutoff',type=int,help='Score below score_cutoff sub pockets will not be included in the pocket scoring calculation. The default is 10.0.')
 parser.add_argument('--best_num',type=int,default=10,metavar='integer, default=10',help='Maximum number of best conformation retention')
 parser.add_argument('--main_num',type=int,default=1,help='Maximum number of best main group conformation retention.')
 parser.add_argument('--pock_info_ftype',type=str,choices=['npy','txt'],default='npy',help='The file format for pocket information, default to npy.')
@@ -1167,8 +1198,8 @@ parser.add_argument('--corr_sort_by',type=str,default='id',choices=['id','rank']
 
 parser.add_argument('--config',type=str,default='',help='Specify the path to the control file. When this parameter is specified, all input information will be read from the control file. Other command line input parameters will be ignored')
 
-parser.add_argument('--pickle',type=str,help='')
-parser.add_argument('--unpickle',type=str,help='')
+parser.add_argument('--pickle',type=str,help='Serialize and save the analysis results')
+parser.add_argument('--unpickle',type=str,help='Read saved data')
 
 #%% run
 if __name__=='__main__':
@@ -1203,6 +1234,9 @@ if __name__=='__main__':
         Serializing(pa,config['MODEL0'])
     elif config['GENERAL']['mode']=='multi':
         print('multi mode')
+        if not 'pock_pairs' in config['GENERAL']:
+                print('error! pock_pairs not set')
+                exit()
         models=ModelGroup()
         align_id=[]
         step=[]
@@ -1223,17 +1257,20 @@ if __name__=='__main__':
                 te=int(config[f'MODEL{i}'].get('frame_stop','-1'))
                 to=int(config[f'MODEL{i}'].get('frame_offset','1'))
                 step.append([ts,te,to])
-        print('start process model...    ',end='')
+        print('Process model...')
         models.Analysis(step)
-        print('proces model done')
-        print('start align model')
-        models.AlignModel(align_id)  
-        print('align model done')
-        print('start match pocket')
-        models.AlignModel(align_id)  
-        print('match pocket done')
+        print('process done\n')
+        print('Align model...')
+        for k in models.pa_list:
+            for m in range(k.size()):
+                k.snap_shots[m]._pocket_xyz=np.stack(k.snap_shots[m]._pocket_xyz,axis=0)
+        models.AlignModel(align_id)
+        print(f'align done\nMatch pocket id...',end='')
+        MGHelper.WritePocketPair(models,config['GENERAL']['pock_pairs'])
+        print(f'{"done":>8s}.\n')
 
         for i in range(len(models.pa_list)):
             print(f'Write data of MODEL{i}')
             WriteFiles(models.pa_list[i],config[f'MODEL{i}'])
             Serializing(models.pa_list[i],config[f'MODEL{i}'])
+            print('')
