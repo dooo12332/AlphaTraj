@@ -126,6 +126,8 @@ Format: `--rec_mask res_id_start,res_id_stop,res_id_start,res_id_stop...` (Note:
 
 Example: If you want to specify residues 30-50, 60, and 80-101, it should be written as: `--rec_mask 30,51,60,61,80,102`
 
+<span style="color: #ff6464">**Note: Please pay careful attention to the writing of this parameter. The residues of this parameter must appear in pairs, even for a single residue, a pair of residue numbers must be specified. The residue pair is a semi inclusion interval, where the starting residue is included and the ending residue is not included**</span>
+
 #### `--lig_mask`:
 
 Specify the residue numbers of the ligand. Format is the same as `rec_mask`. When a ligand is specified, alpha spheres too far from the ligand will be automatically removed.
@@ -244,17 +246,25 @@ Restore data from the saved serialized file. If this parameter is specified, the
 
 If there are too many parameters to specify, running through the command line can be cumbersome and prone to errors. In such cases, the control file mode can be used. The parameters in this mode are almost identical to the command line mode (with very few differences). This section introduces the writing conventions and parameter information for control files. The syntax differs slightly from the command line, as shown in the example file.
 
-#### mode:
-
-This parameter controls the program's execution mode. In the single mode, a single protein is processed. In the multi mode, multiple proteins are processed simultaneously, and protein pocket IDs are unified. This mode is mainly used for pocket comparison.
-
-#### align_mask:
-
-This parameter is only required and must be specified in multi mode. It specifies the residue sequence for overlaying multiple models. Its format is the same as rec_mask. **Each model must be specified.**
+Firstly, let's introduce several parameters unique to the control file mode:
 
 #### Tabs:
 
 Names enclosed in \[\] are tab names. The \[GENERAL\] tab is used to set global parameters. The \[MODEL\*\] tab is used to set model parameters, where \* is a number (starting from 0, in sequential order). If mode=single, only \[MODEL0\] needs to be specified. If mode=multi, additional tabs can be specified like \[MODEL1\], \[MODEL2\], and so on.
+
+The [GENERAL] tab includes mode and align_ Mask, dist_ Cutoff, is_ Use_ Score, percentage, score_ Cut off these parameters, and the other parameters are in the \ [MODE \ * \] tab.
+
+<span style="color: #ff6464">**Tabs cannot be omitted, otherwise parameters cannot be read correctly. A control file must include the \ [GENERAL \] and \ [MODEL0 \] tabs, otherwise an error will also be reported.**</span>
+
+#### `mode`:
+
+This parameter controls the program's execution mode. In the single mode, a single protein is processed. In the multi mode, multiple proteins are processed simultaneously, and protein pocket IDs are unified. This mode is mainly used for pocket comparison.
+
+#### `pock_pairs`:
+
+#### `align_mask`:
+
+This parameter is only required and must be specified in multi mode. It specifies the residue sequence for overlaying multiple models. Its format is the same as rec_mask. **Each model must be specified.**
 
 #### Example confi.ini file:
 
@@ -279,6 +289,9 @@ mode=single
 
 # Score below score_cutoff sub pockets will not be included in the pocket scoring calculation. The default is 10.0.
 #score_cutoff=10.0
+
+#When mode=multi, use this parameter to specify the output file path for pocket matching results.
+#pock_pairs=
 
 [MODEL0]
 # Path to your topology file
