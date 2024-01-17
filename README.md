@@ -6,7 +6,7 @@ AlphaTraj is software designed for analyzing pocket dynamics.
 
 Compared to other pocket dynamics analysis software, AlphaTraj has the following features:
 
-1. Divides protein pockets into several sub-pockets (implemented through modified AlphaSpace2.0 code).
+1. Divides protein pockets into several sub-pockets (implemented through modified [AlphaSpace2.0](https://github.com/RedesignScience/AlphaSpace2/tree/master) code).
 2. Analyzes various dynamic properties of sub-pockets, such as lifetime, fluctuation of pocket volume, average nonpolarizability of the pocket, etc.
 3. Examines relationships between sub-pockets, such as coexistence rate and correlation.
 4. Implements a scoring function tailored for sub-pockets to characterize their quality.
