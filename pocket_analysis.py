@@ -1261,9 +1261,9 @@ if __name__=='__main__':
         models.Analysis(step)
         print('process done\n')
         print('Align model...')
-        for k in models.pa_list:
-            for m in range(k.size()):
-                k.snap_shots[m]._pocket_xyz=np.stack(k.snap_shots[m]._pocket_xyz,axis=0)
+        # for k in models.pa_list:
+        #     for m in range(k.size()):
+        #         k.snap_shots[m]._pocket_xyz=np.stack(k.snap_shots[m]._pocket_xyz,axis=0)
         models.AlignModel(align_id)
         print(f'align done\nMatch pocket id...',end='')
         MGHelper.WritePocketPair(models,config['GENERAL']['pock_pairs'])
