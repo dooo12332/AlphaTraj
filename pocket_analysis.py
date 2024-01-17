@@ -486,7 +486,7 @@ class PocketsAnalysis:
         else:
             self.rec_mask-=1
         
-        self.rec.superpose(rec,0,rec_mask)
+        self.rec.superpose(self.rec,0,self.rec_mask)
         self.snap_shots=SnapShots(rec)
         self.pocketsinfo=PocketsInfo()
         self.distance_cutoff:float=3.0
