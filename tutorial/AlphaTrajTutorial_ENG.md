@@ -84,6 +84,7 @@ trajin equil2.nc
 # Strip
 strip :Na+,Cl-
 strip :WAT
+autoimage
 # Write traj
 trajout traj.nc cdf 
 run
