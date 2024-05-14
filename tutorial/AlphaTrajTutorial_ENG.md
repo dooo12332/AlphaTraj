@@ -262,6 +262,7 @@ The [GENERAL] tab includes mode and align_ Mask, dist_ Cutoff, is_ Use_ Score, p
 This parameter controls the program's execution mode. In the single mode, a single protein is processed. In the multi mode, multiple proteins are processed simultaneously, and protein pocket IDs are unified. This mode is mainly used for pocket comparison.
 
 #### `pock_pairs`:
+This parameter is used to specify the output file for sub-pocket matching results
 
 #### `align_mask`:
 
