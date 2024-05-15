@@ -259,14 +259,15 @@ The [GENERAL] tab includes mode and align_ Mask, dist_ Cutoff, is_ Use_ Score, p
 
 #### `mode`:
 
-This parameter controls the program's execution mode. In the single mode, a single protein is processed. In the multi mode, multiple proteins are processed simultaneously, and protein pocket IDs are unified. This mode is mainly used for pocket comparison.
+Located under the \[GENERAL\] tab. This parameter controls the program's execution mode. In the single mode, a single protein is processed. In the multi mode, multiple proteins are processed simultaneously, and protein pocket IDs are unified. This mode is mainly used for pocket comparison.
 
 #### `pock_pairs`:
-This parameter is used to specify the output file for sub-pocket matching results
+
+Located under the \[GENERAL\] tab. This parameter is used to specify the output file for sub-pocket matching results
 
 #### `align_mask`:
 
-This parameter is only required and must be specified in multi mode. It specifies the residue sequence for overlaying multiple models. Its format is the same as rec_mask. **Each model must be specified.**
+Located under every \[MODE#\] tab. This parameter is only required and must be specified in multi mode. It specifies the residue sequence for overlaying multiple models. Its format is the same as rec_mask. **Each model must be specified.**
 
 #### Example confi.ini file:
 
@@ -430,6 +431,7 @@ When using a control file, you can specify mode as multi to compare pockets of m
 ```shell
 [GENERAL]
 mode=multi
+pock_pairs=./pp.dat
 
 [MODEL0]
 top= ./com_wat_strip.prmtop
@@ -604,7 +606,7 @@ mg = PA.ModelGroup()
 mg.AddPA(pa1)
 mg.AddPA(pa2)
 
-align_rec1 = '1,307'
+align_rec = '1,307'
 align_mask = [np.array(PA.ParserMask(pa1.rec, align_rec, 'bb')),
               np.array(PA.ParserMask(pa2.rec, align_rec, 'bb'))]
 
