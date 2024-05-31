@@ -19,3 +19,4 @@ Please refer to the [tutorial](./tutorial/AlphaTrajTutorial_ENG.md).
 ## Citation
 
 If AlphaTraj is used in your research, please cite the following paper in your manuscript:
+https://pubs.acs.org/doi/10.1021/acs.jctc.4c00476

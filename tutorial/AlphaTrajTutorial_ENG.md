@@ -633,3 +633,30 @@ oparam={'out':'./',
 
 PA.WriteFiles(pa1,oparam)
 ```
+
+# Drawing Demo
+你是一个计算化学领域的专家，请将下面的话翻译成英文，并润色以下。提供三个结果：
+1.打开pymol
+2.导入apocket-r001.pdb和protein-r001-f01705.pdb
+3.将apocket-r001重命名为ap，将protein-r001-f01705重命名为rec。(该步是为了便于后面的操作，你也可以使用原始名称或者任何你喜欢的名字)
+4.调整到你觉得舒适的视角
+
+This section illustrates how to utilize PyMOL to generate surface diagram of protein pockets resembling the style depicted in figures from our published [articles](https://pubs.acs.org/doi/10.1021/acs.jctc.4c00476).
+
+Figure 4 in the article:
+![Figure 4](./_resources/paper-f4.jpg)
+
+These are the files we will utilize. You can download them and follow the tutorial step by step: [out.dat](./_resources/file/out.dat), [apocket-r001.pdb](./_resources/file/apocket-r001.pdb), [protein-r001-f01705.pdb](./_resources/file/protein-r001-f01705.pdb).
+
+## Let's get started.:sunglasses:
+
+### STEP 1
+1. Open PyMOL.
+2. Import apocket-r001.pdb and protein-r001-f01705.pdb.
+3. Rename "apocket-r001" as "ap" and "protein-r001-f01705" as "rec". (<font color=#3498DB>This step is for convenience in subsequent operations; you can also use the original names or any names you prefer.</font>)
+4. Adjust the view to your desired perspective.
+   
+
+
+a $\Rightarrow$ b
+
