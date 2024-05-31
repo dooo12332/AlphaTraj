@@ -656,6 +656,7 @@ These are the files we will utilize. You can download them and follow the tutori
 3. Rename "apocket-r001" as "ap" and "protein-r001-f01705" as "rec". (<font color=#3498DB>This step is for convenience in subsequent operations; you can also use the original names or any names you prefer.</font>)
 4. Adjust the view to your desired perspective.
    
+![STEP 1](./_resources/step1.jpg)
 
 
 a $\Rightarrow$ b
