@@ -1,4 +1,16 @@
-tutorial version 1.1 (corresponding to AlphaTraj version 1.2.2)
+tutorial version 1.2 (corresponding to AlphaTraj version 1.2.2)
+# Contents
+- [Installation](#installation)
+   - [Enviroment](#environment)
+   - [Installation](#installation-1)
+- [User Guide](#user-guide)
+   - [Trajectory preprocessing](#trajectory-preprocessing)
+   - [Using AlphaTraj](#using-alphatraj)
+   - [Running AlphaTraj (Demonstration)](#running-alphatraj-demonstration)
+- [Output File Explanation](#output-file-explanation)
+- [Drawing Demo](#drawing-demo)
+   - [Protein surface diagram](#protein-surface-diagram)
+
 # Installation
 
 ## Environment
@@ -635,29 +647,60 @@ PA.WriteFiles(pa1,oparam)
 ```
 
 # Drawing Demo
-你是一个计算化学领域的专家，请将下面的话翻译成英文，并润色以下。提供三个结果：
-1.打开pymol
-2.导入apocket-r001.pdb和protein-r001-f01705.pdb
-3.将apocket-r001重命名为ap，将protein-r001-f01705重命名为rec。(该步是为了便于后面的操作，你也可以使用原始名称或者任何你喜欢的名字)
-4.调整到你觉得舒适的视角
 
+## Protein surface diagram
 This section illustrates how to utilize PyMOL to generate surface diagram of protein pockets resembling the style depicted in figures from our published [articles](https://pubs.acs.org/doi/10.1021/acs.jctc.4c00476).
 
 Figure 4 in the article:
 ![Figure 4](./_resources/paper-f4.jpg)
 
-These are the files we will utilize. You can download them and follow the tutorial step by step: [out.dat](./_resources/file/out.dat), [apocket-r001.pdb](./_resources/file/apocket-r001.pdb), [protein-r001-f01705.pdb](./_resources/file/protein-r001-f01705.pdb).
+These are the files we will utilize. You can download them and follow the tutorial step by step: [out.dat](./_resources/file/out.dat), [apocket-r001.pdb](./_resources/file/apocket-r001.pdb), [protein-r001-f01705.pdb](./_resources/file/protein-r001-f01705.pdb).  
 
-## Let's get started.:sunglasses:
+Let's get started.:sunglasses:
 
-### STEP 1
+### STEP 1 Import the file
 1. Open PyMOL.
 2. Import apocket-r001.pdb and protein-r001-f01705.pdb.
 3. Rename "apocket-r001" as "ap" and "protein-r001-f01705" as "rec". (<font color=#3498DB>This step is for convenience in subsequent operations; you can also use the original names or any names you prefer.</font>)
 4. Adjust the view to your desired perspective.
    
-![STEP 1](./_resources/step1.jpg)
+![STEP 1](./_resources/step1.png)
 
+### STEP 2 Draw
+1. Display the protein "surface" and set the protein color to "gray90"
+![STEP 2.1](./_resources/step2.1.jpg)
+2. Resize spheres scale to 0.15. (Code: `set sphere_scale, 0.15`)
+![STEP 2.2](./_resources/step2.2.jpg)
+3. Open the file apocket-r001.pdb using a text editor such as Sublime or VS Code. The third-to-last column in the file represents pocket rankings. (The original PDB file uses this column to store Temperature factors. Since the format of this column is floating-point numbers with .00 appended to each number, please disregard the decimal part of this column directly.)
+4. Within apocket-r001.pdb, each sub-pocket corresponds to a residue. Taking the top-ranked pocket as an example, we first locate the column where the value is 1.00 in the third-to-last column. Then, we inspect the values in these columns corresponding to the fifth column, which represent residue numbers. In our system, the residue number for the top-ranked sub-pocket is 3. With the residue number, you can directly select the sub-pocket in PyMOL.
+![STEP 2.4](./_resources/step2.4.jpg)
+5. Back in PyMOL, now select residue 3 in "ap" and name this selection "sp1". (Code: `select sp1, resi 3 and ap`).
+![STEP 2.5](./_resources/step2.5.jpg)
+6. Repeat steps 4 and 5 to select all the sub-pockets you need. Here, we have selected all sub-pockets with scores exceeding 10 in out.dat.
+7. Apply a palecyan hue to "ap" (this step establishes the color for unselected sub-pockets, though you may opt for a different color), and then color each selected sub-pocket according to your preference.
+![STEP 2.7](./_resources/step2.7.jpg)
+8. Select all "PCC" atoms from "ap" and save them as "ap-pcc"(Code: `select ap-pcc,name pcc and ap`). 
+9. Set the sphere_scale of "ap-pcc" to 1.0.(Code: `set sphere_scale, 1.0, ap-pcc`)
+10. Set the sphere_transparency of "ap-pcc" to 0.3.(Code: `set sphere_transparency, 0.3,ap-pcc`)
+![STEP 2.10](./_resources/step2.10.jpg)
 
-a $\Rightarrow$ b
+### STEP 3 Stylized
+1. Before rendering, you can make some adjustments to enhance the outcome, such as improving the quality of the protein surface and changing the background color.
+```python
+set surface_quality, 2
+set surface_color_smoothing_threshold, 0.5
+bg_color white
+set ray_shadow,0
+```
+2. Now, you can render finished images using the "ray" command, or you can customize styles using the "ray_trace_mode" option.  
+ray_trace_mode=0
+<img src="./_resources/ray-mode0.png" width=350>
+ray_trace_mode=3
+<img src="./_resources/ray-mode3.png" width=350>
+
+Lastly, the .pse files for each step in PyMOL can be accessed here for reference (
+   [step1.pse](./_resources/file/step1.pse), 
+   [step2.pse](./_resources/file/step2.pse), 
+   [step3.pse](./_resources/file/step3.pse)).
+
 
