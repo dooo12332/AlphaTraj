@@ -359,6 +359,7 @@ out_main_best=true
 out_coex=true
 out_corr=true
 out_mtp=true
+out_group=true
 
 # Other
 # Maximum number of best conformation retention
@@ -393,7 +394,7 @@ The diagram below illustrates the box position and size.
 #### Command Line Execution
 
 ```shell
-python G:\data\pocket_analysis\example\AlphaTraj\pocket_analysis.py --top ./com_wat_strip.prmtop --traj ./traj.nc --box 2126,4357 17,26,30 --frame_start 500 --frame_stop 1000 --out ./ --out_pock_info true --out_main_best true --out_coex true --out_corr true --out_mtp true
+python G:\data\pocket_analysis\example\AlphaTraj\pocket_analysis.py --top ./com_wat_strip.prmtop --traj ./traj.nc --box 2126,4357 17,26,30 --frame_start 500 --frame_stop 1000 --out ./ --out_pock_info true --out_main_best true --out_coex true --out_corr true --out_mtp true --out_group true
 ```
 
 #### Control File Execution
@@ -422,6 +423,7 @@ out_main_best=true
 out_coex=true
 out_corr=true
 out_mtp=true
+out_group=true
 
 pock_info_ftype=txt
 coex_sort_by='rank'
@@ -466,6 +468,7 @@ out_main_best=true
 out_coex=true
 out_corr=true
 out_mtp=true
+out_group=true
 
 pock_info_ftype=txt
 coex_sort_by='rank'
@@ -641,7 +644,8 @@ oparam={'out':'./',
         'out_main_best':'true',
         'out_coex':'true',
         'out_corr':'true',
-        'out_mtp':'true',}
+        'out_mtp':'true',
+        'out_group':'true'}
 
 PA.WriteFiles(pa1,oparam)
 ```
@@ -656,7 +660,7 @@ Figure 4 in the article:
 
 These are the files we will utilize. You can download them and follow the tutorial step by step: [out.dat](./_resources/file/out.dat), [apocket-r001.pdb](./_resources/file/apocket-r001.pdb), [protein-r001-f01705.pdb](./_resources/file/protein-r001-f01705.pdb).  
 
-Let's get started.:sunglasses:
+Let's get started.:smile:
 
 ### STEP 1 Import the file
 1. Open PyMOL.
