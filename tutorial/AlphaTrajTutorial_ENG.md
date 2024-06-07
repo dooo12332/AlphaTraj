@@ -10,6 +10,7 @@ tutorial version 1.2 (corresponding to AlphaTraj version 1.2.2)
 - [Output File Explanation](#output-file-explanation)
 - [Drawing Demo](#drawing-demo)
    - [Protein surface diagram](#protein-surface-diagram)
+   - [Temporal evolution plots of the groups](#temporal-evolution-plots-of-the-groups)
 
 # Installation
 
@@ -708,3 +709,59 @@ Lastly, the .pse files for each step in PyMOL can be accessed here for reference
    [step3.pse](./_resources/file/step3.pse)).
 
 
+## Temporal evolution plots of the groups
+
+This chapter outlines the procedures for graphing the temporal progression of main group elements.
+To generate this plot, two files are required: "[Pocket_maingroup_v_time.dat](./_resources/file/Pocket_maingroup_v_time.dat)" and "[Pocket_group_mainname_list.dat](./_resources/file/Pocket_group_mainname_list.dat)". You may download these files beforehand and follow the tutorial step-by-step.
+
+Let's get started.:smile:
+
+### Use Origin to draw
+*Note: The demonstration is performed using OriginPro 2018. The interface may differ from the one you are using due to version discrepancies.*
+1. import "Pocket_maingroup_v_time.dat"  
+![Origin-1](./_resources/origin-1-1.png)  
+After importing, the data appears as depicted in the following figure. Each column represents a main group, while each row corresponds to a frame. If a pocket is absent in a particular frame, the value is marked as -1; otherwise, it is a positive integer. Different main groups possess distinct values (i.e., different columns hold different values), enabling the points of different main groups to have varying heights during plotting, thereby facilitating their differentiation.
+<img src="./_resources/origin-1-2.jpg" width=900>  
+
+2. Currently, only the data for the y-axis is available. We need to add a column of x-axis information.  
+Insert a column at the very beginning.  
+![Origin-2-1](./_resources/origin-2-1.jpg)  
+Set this(first) column as the x-axis. The second column is for the y-axis.  
+![Origin-2-2](./_resources/origin-2-2.jpg)  
+![Origin-2-3](./_resources/origin-2-3.jpg)  
+Fill the first column with row numbers.  
+![Origin-2-4](./_resources/origin-2-4.jpg)  
+After the above operations, the data table will eventually look like the following figure.  
+<img src="./_resources/origin-2-5.jpg" width=900>  
+
+3. Select all the data, then click on "plot" -> "Scatter" -> "Scatter" sequentially.
+<img src="./_resources/origin-3-1.jpg" width=900>  
+![Origin-3-2](./_resources/origin-3-2.jpg)
+
+Next, refine the obtained scatter plot as follows:  
+- Eliminate the legend.  
+- Adjust the y-axis range to 61.5-81.5 (to hide rows with values of -1) and remove the y-axis title.
+- Adjust the x-axis range to 0-1500 (our data spans 1500 frames). Under the "Tick Labels" tab, set "Divide by Factor" to 10 (to convert frames to ns) and set the x-axis title as "Time (ns)".  
+![Origin-3-3](./_resources/origin-3-3.jpg)
+- In the "Symbol" tab under "Plot Properties," set the size to 2.  
+![Origin-3-4](./_resources/origin-3-4.jpg)
+- In the "Group" tab under "Plot Properties," under "Symbol Type," set "Increment" to "None".  
+![Origin-3-5](./_resources/origin-3-5.png)
+- Display the top and right axes.
+
+**The adjusted scatter plot is shown below.**
+![Origin-3-6](./_resources/origin-3-6.png)
+
+4. Finally, let's add labels to the y-axis. Since each row in the graph represents a main group, displaying the names of all main groups would clutter the graph and diminish its aesthetics. We only need to highlight the ones we require, typically those with a significant presence over time. This necessitates the use of the second file, "Pocket_group_mainname_list.dat", where the first column contains the main group names and the second column represents their survival time.  
+![Origin-4-1](./_resources/origin-4-1.jpg)  
+The main group listed in the second row of this file corresponds to the top row in the scatter plot (the row with the highest y-value). It is also the main group in the last column of the "Pocket_maingroup_v_time.dat" file.  
+**In other words, the main groups in "Pocket_group_mainname_list.dat" are arranged in reverse order, with the main groups at the beginning having higher pocket scores.**  
+**Main groups with lower scores typically have shorter survival times. This is why we only select main groups with scores of 62 or above. (Adjust the y-axis range to 61.5-81.5)**  
+Now, let's label it on the y-axis.
+![Origin-4-2](./_resources/origin-4-2.jpg)  
+As the names of the main groups are excessively long, I've repositioned the image on the canvas. (Alternatively, using abbreviations to represent the names can address the issue of length, thereby avoiding the need to adjust the image's placement on the canvas.)
+
+The final illustration is displayed below. **However, please note that this is just a rough representation of the drawing process. Further optimization and adjustments are necessary to meet academic standards.**
+![Origin-4-3](./_resources/origin-4-3.jpg)
+
+You can find the [origin.opju](./_resources/file/origin.opju) file here for your reference.
