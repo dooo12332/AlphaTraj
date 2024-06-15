@@ -196,6 +196,10 @@ Whether to output the best conformations. Default is true.
 
 Whether to output raw information about pockets. Default is false. Default output format is npy.
 
+#### `--out_group`:[true,false]
+
+Whether to output group-related analysis results
+
 #### `--out_main_best`:[true,false]
 
 Whether to output the best conformations of the main group. Default is false.
