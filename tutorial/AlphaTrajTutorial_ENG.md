@@ -1,4 +1,4 @@
-tutorial version 1.2 (corresponding to AlphaTraj version 1.2.2)
+tutorial version 1.2 (corresponding to AlphaTraj version 1.2.3)
 # Contents
 - [Installation](#installation)
    - [Enviroment](#environment)
@@ -277,6 +277,14 @@ Located under the \[GENERAL\] tab. This parameter controls the program's executi
 #### `pock_pairs`:
 
 Located under the \[GENERAL\] tab. This parameter is used to specify the output file for sub-pocket matching results
+
+#### `match_score_cutoff`:
+
+Subpockets scoring less than this cutoff value will be ignored for the duration of the pocket matching process. The default value is 0.0.
+
+#### `match_dist_cutoff`:
+
+The cutoff value for the clustering distance during pocket matching, default is 2.0.In general, it is sufficient to keep this parameter as default.
 
 #### `align_mask`:
 
