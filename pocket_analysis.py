@@ -697,7 +697,7 @@ class ModelGroup:
             self.pa_list[i].Align(coord_ref,align_mask[i])
             print(f'{"done":>8s}.')
 
-    def PocketMatch(self,score_cutoff:float=10.0,dist_cutoff=3.0):
+    def PocketMatch(self,score_cutoff:float=0.0,dist_cutoff=3.0):
         tmcoord=[]
         tmpid=[]
         tmsplit=[]
@@ -939,30 +939,32 @@ class PAHelper:
 
 class MGHelper:
     @staticmethod
-    def WritePocketPair(mg:ModelGroup,file_path:str,**kw)->None:
+    def WritePocketPair(mg:ModelGroup,file_path:str,score_cutoff:float=0.0,dist_cutoff:float=2.0,**kw)->None:
         fdir=os.path.dirname(file_path)
         if not os.path.exists(fdir):
             print('Directory does not exist, create directory...',end='')
             os.makedirs(fdir)
             print('done',end='')
-        pnum,opid,pcluster=mg.PocketMatch(dist_cutoff=2.5)
-        pcumnum=np.cumsum(pnum)
+        pnum,opid,pcluster=mg.PocketMatch(score_cutoff,dist_cutoff)
+        pcumnum=np.cumsum(pnum)#每个Modle的口袋数量
         cluster_num=int(np.max(pcluster))
-        pcluster_s=np.split(pcluster,pcumnum)
-        opid_s=np.split(opid,pcumnum)
+        pcluster_s=np.split(pcluster,pcumnum)#每个口袋对应的簇ID
+        opid_s=np.split(opid,pcumnum)#每个口袋的原始ID
         model_num=len(mg.pa_list)
+        need_write_cluster_id=np.argwhere(np.array([np.sum([c in pcluster_s[m] for m in range(model_num)]) for c in range(cluster_num)])>1).flatten()#提取出需要处理的簇ID
+
         with open(file_path,'w') as f:
             out='#'
             for i in range(model_num):
-                out+=f'model{i},'
+                out+=f'model{i};'
             f.writelines(out[:-1]+'\n')
-            for i in range(cluster_num):
+
+            pockpair_id=opid_s[0][np.argwhere(pcluster_s[0]==3).flatten()]
+            for i in need_write_cluster_id:
                 out=''
-                for j in range(model_num):
-                    tpid=-1
-                    if i in pcluster_s[j]:
-                        tpid=mg.pa_list[j].pocketsinfo.GetRank(opid_s[j][np.argwhere(pcluster_s[j]==i).item()])
-                    out+=f'{tpid},'
+                for m in range(model_num):
+                    pockpair_id=np.array([mg.pa_list[m].pocketsinfo.GetRank(o)+1 for o in opid_s[m][np.argwhere(pcluster_s[m]==i).flatten()]])
+                    out+=np.array2string(pockpair_id,separator=',')[1:-1]+';'
                 f.writelines(out[:-1]+'\n')
 
 def str2bool(s:str)->bool:
@@ -1092,6 +1094,9 @@ def GetPA(md,gparam)->PocketsAnalysis:
     return pa
 
 def WriteFiles(pa:PocketsAnalysis,md)->None:
+    if 'out' not in md.keys():
+        print("The 'out' parameter was not detected and the data file could not be exported")
+        return
     out_dir=md['out']
     if str2bool(md.get('out_summary','True')):
         print('Write sub-pocket info...',end='')
@@ -1144,7 +1149,7 @@ parser = argparse.ArgumentParser(
                     formatter_class=SmartFormatter,
                     description='Analyzing protein pocket features in molecular dynamics simulations trajectories.')
 
-parser.add_argument('-v,--version', action='version', version='%(prog)s 1.2.2')
+parser.add_argument('-v,--version', action='version', version='%(prog)s 1.2.3')
 parser.add_argument('--top', type=str,metavar='Path_to_your_topology_file',default='',
                     help='This parameter specifies the path to your topology file.')
 parser.add_argument('--traj', type=str,metavar='Path_to_your_traj_file',default='',
@@ -1266,7 +1271,15 @@ if __name__=='__main__':
         #         k.snap_shots[m]._pocket_xyz=np.stack(k.snap_shots[m]._pocket_xyz,axis=0)
         models.AlignModel(align_id)
         print(f'align done\nMatch pocket id...',end='')
-        MGHelper.WritePocketPair(models,config['GENERAL']['pock_pairs'])
+        m_score=0.0
+        m_dist=2.0
+        if 'match_score_cutoff' in config['GENERAL']:
+            m_score=float(config['GENERAL']['match_score_cutoff'])
+            print(f'\nset "match_score_cutoff" to {m_score}')
+        if 'match_dist_cutoff' in config['GENERAL']:
+            m_dist=float(config['GENERAL']['match_dist_cutoff'])
+            print(f'set "match_dist_cutoff" to {m_dist}')
+        MGHelper.WritePocketPair(models,config['GENERAL']['pock_pairs'],m_score,m_dist)
         print(f'{"done":>8s}.\n')
 
         for i in range(len(models.pa_list)):
