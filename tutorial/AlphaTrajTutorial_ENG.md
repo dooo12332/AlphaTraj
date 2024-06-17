@@ -583,10 +583,11 @@ Information about all sub-pockets.
 Raw data file generated when specifying the pickle parameter. Can be loaded using the unpickle parameter.
 
 ### pock_pairs.dat
-Each row is the pocket rank matched by a model, -1 indicates no matched pocket.  
-Note: Matching only counts non-invalid sub-pockets. So, the absence of a matched pocket does not imply non-existence; it might be that the pocket became an invalid sub-pocket.
+Each column is a pocket for a model, separated by a semicolon. It is empty if there is no corresponding pocket.
 
-![Explanation of pock_pairs.dat file](./_resources/49945c30827e3bd04197b14f451fadae.png)
+![Explanation of pock_pairs.dat file](./_resources/pock_match.jpg)  
+**It is best to import the results into excel (or other similar software) to view them for a good experience.**  
+![import to excel](./_resources/pock_match1.jpg)  
 
 # Using AlphaTraj as a Python Library
 
