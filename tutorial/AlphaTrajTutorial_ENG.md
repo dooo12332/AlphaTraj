@@ -262,15 +262,16 @@ Restore data from the saved serialized file. If this parameter is specified, the
 
 ### Control File Introduction
 
-If there are too many parameters to specify, running through the command line can be cumbersome and prone to errors. In such cases, the control file mode can be used. The parameters in this mode are almost identical to the command line mode (with very few differences). This section introduces the writing conventions and parameter information for control files. The syntax differs slightly from the command line, as shown in the example file.
+If there are too many parameters to specify, running through the command line can be cumbersome and prone to errors. **<span style="color: #ff6464">In such cases, the control file mode can be used. The parameters in this mode are almost identical to the command line mode (with very few differences).</span>** This section introduces the conventions for writing control files and information on additional parameters. The syntax differs slightly from the command line, as shown in the example file.
+
 
 Firstly, let's introduce several parameters unique to the control file mode:
 
-#### Tabs:
+#### `Tabs`:
 
 Names enclosed in \[\] are tab names. The \[GENERAL\] tab is used to set global parameters. The \[MODEL\*\] tab is used to set model parameters, where \* is a number (starting from 0, in sequential order). If mode=single, only \[MODEL0\] needs to be specified. If mode=multi, additional tabs can be specified like \[MODEL1\], \[MODEL2\], and so on.
 
-The [GENERAL] tab includes mode and align_ Mask, dist_ Cutoff, is_ Use_ Score, percentage, score_ Cut off these parameters, and the other parameters are in the \ [MODE \ * \] tab.
+**<span style="color: #ff6464">The [GENERAL] tab includes mode and align_ Mask, dist_ Cutoff, is_ Use_ Score, percentage, score_ Cut off these parameters, and the other parameters are in the \ [MODE \ * \] tab.</span>**
 
 <span style="color: #ff6464">**Tabs cannot be omitted, otherwise parameters cannot be read correctly. A control file must include the \ [GENERAL \] and \ [MODEL0 \] tabs, otherwise an error will also be reported.**</span>
 
@@ -292,13 +293,16 @@ The cutoff value for the clustering distance during pocket matching, default is 
 
 #### `align_mask`:
 
-Located under every \[MODE#\] tab. This parameter is only required and must be specified in multi mode. It specifies the residue sequence for overlaying multiple models. Its format is the same as rec_mask. **Each model must be specified.**
+Located under every \[MODE#\] tab. This parameter is only required and must be specified in multi mode. It specifies the residue sequence for overlaying multiple models. Its format is the same as rec_mask. **Each model must be specified.**  
+When comparing pockets of two systems, AlphaTraj aligns the two pocket proteins based on the align_mask parameter under each model. Thus, it's crucial to ensure that the align_mask specifies the same number and types of residues and atoms. The align_mask can be adjusted flexibly—for example, by selecting only residues that make up the pocket, which enhances the accuracy of pocket alignment. At the same time, specifying only certain residues can bypass issues arising from inconsistent residues. For example, if a protein has 300 residues and its active pocket comprises residues 20-50, but residue 35 is mutated, the align_mask would be specified as align_mask=20,35,36,51 (note the closed-open interval notation [20,35), [36,51)). The parameters should be listed in sequence separated by commas, maintaining pairs throughout. You can refer to the tutorial's explanation of the rec_mask parameter for more details (all mask specifications follow the same rules).
 
 #### Example confi.ini file:
 
 The parameter names and input format in the file are the same as the command line parameters. # after the hash sign is a comment.
 ```shell
 [GENERAL]
+#This tab is used to specify global parameters
+
 # The mode parameter controls the execution mode of the program. 
 # There are two options: single and multi. When mode=single, 
 # only a single model is processed. When mode=multi, execute the model comparison task
@@ -322,6 +326,8 @@ mode=single
 #pock_pairs=
 
 [MODEL0]
+#This tab is used to specify relevant parameters about Model 0
+
 # Path to your topology file
 top= ./com_wat_strip.prmtop
 
@@ -457,23 +463,56 @@ All results are stored in the pock_info folder.
 When using a control file, you can specify mode as multi to compare pockets of multiple systems, align pocket conformations, and perform comprehensive analyses. For example, we want to compare the pockets of the wild-type (model0) and mutant-type (model1) of the main protease. The results of the wild-type (model0) have already been analyzed and the raw data saved. We can directly read it. The control file is as follows:
 ```shell
 [GENERAL]
+
 mode=multi
 pock_pairs=./pp.dat
 
 [MODEL0]
+#This tab is used to specify relevant parameters about Model 0
+
+# Path to your topology file
 top= ./com_wat_strip.prmtop
+
+# specifies the path to the tracking file. Multiple paths separated by ','
 traj= ./traj.nc
 
+# specifies your receptor protein or ligand residue index. 
+# If neither rec_mask nor lig_mask are specified, all atoms are considered as proteins. 
+# If rec_mask is not specified but lig_mask is specified, then rec_mask = total_atom - lig_mask.
+# (Note: Parameters must appear in pairs.) 
+# Format: --rec_mask resn1,resn2,resn3,resn4... 
+# Example: If you want to specify residues 1-50, 60 and 70-89 as your receptor protein: 
+# "-rec_mask 1,51,60,61,70,90"
 #rec_mask=
 #lig_mask=
+
+# If you are only interested in a certain region of the protein, you can specify 
+# one or more location boxes that wrap around that region. 
+# The analysis will be focused within the location boxes, which allows the program output 
+# to filter out data you are not interested in.
+# At the same time, this can speed up the running of the program and reduce the memory requirements.
+# NOTE: To accommodate continuous changes in protein conformation, the box centers are set to 
+# the coordinates of a single atom or to the geometric centers of several atoms, 
+# which allows the box coordinates to be synchronized with the conformational changes of the protein.
+# Format: --box atom1_id,atom2_id length(X-axis direction),width(Y-axis direction),height(Z-axis direction)
+# Example: --box 372 18,10,22 458,963 14,12,20
 box= 2126,4357 17,26,30
 
+
+# Specify the starting, ending, and interval of the processed frames
 frame_start=500
 frame_stop=1000
 #frame_offset=
 
+# The folder where the analysis results are saved
 out= ./
 
+# It specifies the residue sequence for overlaying multiple models. Its format is the same as rec_mask.
+align_mask=307,613
+
+
+# Control the content of the output
+# Due to protein superposition, the coordinates in all PDB files have changed. These files need to be re-exported. To simplify, I will regenerate all result files directly for efficiency.
 out_summary=true
 out_best=true
 out_pock_info=true
@@ -488,11 +527,49 @@ coex_sort_by='rank'
 corr_sort_by='rank'
 
 [MODEL1]
+#This tab is used to specify relevant parameters about Model 1
+
+#top= 
+
+#traj= 
+
+#rec_mask=
+#lig_mask=
+
+#box= 
+
+
+#frame_start=
+#frame_stop=
+#frame_offset=
+
+
+# Serialized data storage location, not specifying will not save the original data. 
+#The saved intermediate file is loaded here (which stores analyzed data, so it can be read and used directly), so there is no need to specify the parameters above
+#pickle= 
 unpickle=./raw.dat
+
+# It specifies the residue sequence for overlaying multiple models. Its format is the same as rec_mask.
 align_mask=307,613
+
+# The folder where the analysis results are saved
 out=./comp/model0
+
+
+# Control the content of the output
+# Due to protein superposition, the coordinates in all PDB files have changed. These files need to be re-exported. To simplify, I will regenerate all result files directly for efficiency.
+out_summary=true
 out_best=true
+out_pock_info=true
 out_main_best=true
+out_coex=true
+out_corr=true
+out_mtp=true
+out_group=true
+
+pock_info_ftype=txt
+coex_sort_by='rank'
+corr_sort_by='rank'
 ```
 
 *Note: Image links (image_link1, image_link2, image_link3) should be replaced with actual image URLs for a proper display.*
