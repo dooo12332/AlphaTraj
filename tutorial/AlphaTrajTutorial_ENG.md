@@ -7,7 +7,9 @@ tutorial version 1.2 (corresponding to AlphaTraj version 1.2.3)
    - [Trajectory preprocessing](#trajectory-preprocessing)
    - [Using AlphaTraj](#using-alphatraj)
    - [Running AlphaTraj (Demonstration)](#running-alphatraj-demonstration)
+   - [Comparing Multiple Systems with AlphaTraj](#comparing-multiple-systems-with-alphatraj)
 - [Output File Explanation](#output-file-explanation)
+- [Using AlphaTraj as a Python Library](#using-alphatraj-as-a-python-library)
 - [Drawing Demo](#drawing-demo)
    - [Protein surface diagram](#protein-surface-diagram)
    - [Temporal evolution plots of the groups](#temporal-evolution-plots-of-the-groups)
@@ -459,7 +461,7 @@ After the program runs, the folder content looks like this.
 ![The contents of the folder after the program runs](./_resources/5dc4a725190c7a391518c783b2174fe8.png)  
 All results are stored in the pock_info folder.
 
-#### Comparing Multiple Systems with AlphaTraj
+### Comparing Multiple Systems with AlphaTraj
 When using a control file, you can specify mode as multi to compare pockets of multiple systems, align pocket conformations, and perform comprehensive analyses. For example, we want to compare the pockets of the wild-type (model0) and mutant-type (model1) of the main protease. The results of the wild-type (model0) have already been analyzed and the raw data saved. We can directly read it. The control file is as follows:
 ```shell
 [GENERAL]
@@ -608,6 +610,8 @@ The annotation for the apocket file is shown below:
 
 
 apocket files can be directly read by PyMOL. During drawing, use the sub-pocket ID to find the desired pocket, map it to residue serial, then find that residue in PyMOL, adjusting it as needed.
+
+**Please refer to the [Protein surface diagram](#protein-surface-diagram) section for instructions on how to use these files to draw schematic diagrams of protein pockets.**
 
 #### vol_xxxx_v_time.dat
 
