@@ -567,13 +567,17 @@ class PocketsAnalysis:
         if coord.shape[0]!=mask.shape[0]:
             print('Atom number mismatch! Unable to perform pocket matching, skip.',end='')
             return False
-        N=self.rec.xyz[0,mask,:]
-        R=self._rotateMatrix(N,coord)
-        T=-np.mean(N,axis=0)
-        Ta=T*10
+        # N=self.rec.xyz[0,mask,:]
+        # R=self._rotateMatrix(N,coord)
+        # T=-np.mean(N,axis=0)
+        # Ta=T*10
         for i in range(self.size()):
-            self.rec.xyz[i]+=T
-            self.rec.xyz[i]=self.rec.xyz[i]@R
+            N=self.rec.xyz[self.shift+i*self.offset,mask,:]
+            R=self._rotateMatrix(N,coord)
+            T=-np.mean(N,axis=0)
+            Ta=T*10
+            self.rec.xyz[self.shift+i*self.offset]+=T
+            self.rec.xyz[self.shift+i*self.offset]=self.rec.xyz[self.shift+i*self.offset]@R
             self.snap_shots[i]._alpha_xyz+=Ta
             self.snap_shots[i]._alpha_xyz=self.snap_shots[i]._alpha_xyz@R
             self.snap_shots[i]._pocket_xyz+=Ta
@@ -615,6 +619,7 @@ class PocketsAnalysis:
     def Analysis(self,start:int=0,end:int=-1,offset:int=1):
         print('processing snap shots....     ')
         self.offset=offset
+        self.shift=start
         self.snap_shots.Process(start,end,offset,self.rec_mask,self.lig_mask)
         print('Clustering pockets...    ',end='')
         self._ClusterPockets()
@@ -685,14 +690,9 @@ class ModelGroup:
         #center model 1
         coord_ref=self.pa_list[0].rec.xyz[0,align_mask[0],:]
         T=np.mean(coord_ref,axis=0)
-        Ta=T*10
-        coord_ref=self.pa_list[0].rec.xyz[0,align_mask[0],:]
-        for i in range(self.pa_list[0].size()):
-            self.pa_list[0].rec.xyz[i]-=T
-            self.pa_list[0].snap_shots[i]._alpha_xyz-=Ta
-            self.pa_list[0].snap_shots[i]._pocket_xyz-=Ta
+        coord_ref-=T
         #align model 2...
-        for i in range(1,self.size()):
+        for i in range(self.size()):
             print(f'Align model{i}...',end='')
             self.pa_list[i].Align(coord_ref,align_mask[i])
             print(f'{"done":>8s}.')
@@ -1181,7 +1181,7 @@ parser.add_argument('--dist_cutoff',type=float,default=3.0,metavar='float, defau
 
 parser.add_argument('--frame_start',type=int,default=0,metavar='integer, default=0',help='This parameter specifies which frame of the trajectory to start processing from, and frames before this parameter will be ignored')
 parser.add_argument('--frame_stop',type=int,default=-1,metavar='integer, default=-1',help='This parameter specifies the frame to which the program ends processing, and the frames after this parameter will be ignored. The default value of this parameter is the last frame')
-parser.add_argument('--frame_offset',type=int,default=1,metavar='integer, default=1',help='This parameter specifies the frame interval step size for processing trajectories.')
+#parser.add_argument('--frame_offset',type=int,default=1,metavar='integer, default=1',help='This parameter specifies the frame interval step size for processing trajectories.')
 
 parser.add_argument('--out',type=str,metavar='out_dir',default='./', help='The folder where the analysis results are saved')
 parser.add_argument('--out_summary',type=bool,metavar='bool, default=True',default=True,help='Output the sub pocket info')
@@ -1233,7 +1233,8 @@ if __name__=='__main__':
         if not 'unpickle' in config['MODEL0'].keys():
             ts=int(config[f'MODEL0'].get('frame_start','0'))
             te=int(config[f'MODEL0'].get('frame_stop','-1'))
-            to=int(config[f'MODEL0'].get('frame_offset','1'))
+            #to=int(config[f'MODEL0'].get('frame_offset','1'))
+            to=1
             pa.Analysis(ts,te,to)
         WriteFiles(pa,config['MODEL0'])
         Serializing(pa,config['MODEL0'])
@@ -1260,7 +1261,8 @@ if __name__=='__main__':
                 align_id.append(np.array(ParserMask(models[i].rec,config[f'MODEL{i}']['align_mask'].strip(),mode='bb'),dtype=int))
                 ts=int(config[f'MODEL{i}'].get('frame_start','0'))
                 te=int(config[f'MODEL{i}'].get('frame_stop','-1'))
-                to=int(config[f'MODEL{i}'].get('frame_offset','1'))
+                #to=int(config[f'MODEL{i}'].get('frame_offset','1'))
+                to=1
                 step.append([ts,te,to])
         print('Process model...')
         models.Analysis(step)
