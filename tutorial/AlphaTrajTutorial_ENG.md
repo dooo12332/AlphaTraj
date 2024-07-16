@@ -175,12 +175,12 @@ Distance cutoff value during clustering of sub-pockets using hierarchical cluste
 #### `--frame_start`:
 
 Starting frame for trajectory analysis. This frame is included. Default is 1.
-**<span style="color: #ff0000;">NOTE:抽帧应该尽量在生成处理轨迹的时候完成。</span>**
+**<span style="color: #ff0000;">NOTE:Extracting frames should be done as much as possible when generating processing trajectories</span>**
 
 #### `--frame_stop`:
 
 Ending frame for trajectory analysis. This frame is not included. Default is the last frame of the trajectory.
-**<span style="color: #ff0000;">NOTE:抽帧应该尽量在生成处理轨迹的时候完成。</span>**
+**<span style="color: #ff0000;">NOTE:Extracting frames should be done as much as possible when generating processing trajectories</span>**
 
 #### `--out`:
 
