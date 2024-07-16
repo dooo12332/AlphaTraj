@@ -95,6 +95,8 @@ The script file (`proc-traj.in`) contains:
 parm com_wat.prmtop
 # Load traj file
 trajin equil1.nc
+# If the number of frames is too high, you can perform a frame extraction operation
+#trajin equil1.nc 500 1000 10
 trajin equil2.nc
 # Strip
 strip :Na+,Cl-
@@ -173,11 +175,12 @@ Distance cutoff value during clustering of sub-pockets using hierarchical cluste
 #### `--frame_start`:
 
 Starting frame for trajectory analysis. This frame is included. Default is 1.
+**<span style="color: #ff0000;">NOTE:抽帧应该尽量在生成处理轨迹的时候完成。</span>**
 
 #### `--frame_stop`:
 
 Ending frame for trajectory analysis. This frame is not included. Default is the last frame of the trajectory.
-
+**<span style="color: #ff0000;">NOTE:抽帧应该尽量在生成处理轨迹的时候完成。</span>**
 
 #### `--out`:
 
