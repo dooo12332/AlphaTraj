@@ -171,6 +171,7 @@ class PocketsInfo:
             tid=-1-i
             fid=frame_list[sort_id[tid]]
             out.append([fid,self._total_score_v_time[fid],tvol[fid],self.GetMainName(fid),self.GetMinorName(i)])
+            #out=[frame_id,total_score_v_time,tol_volume_v_taime,mian_name,minor_name]
         return out
 
     def _CalaPocketRank(self)->None:
@@ -724,7 +725,7 @@ class ModelGroup:
 class PAHelper:
     @staticmethod
     def _WriteBestFrames(pa:PocketsAnalysis,out_dir:str,result:list,**kw)->None:
-        frame_shift=kw.get('frame_shift',0)
+        #out=result=[frame_id,total_score_v_time,tol_volume_v_taime,mian_name,minor_name]
         is_out_vol_v_time=kw.get('vol_v_time',True)
     
         if not os.path.exists(out_dir):
@@ -750,12 +751,12 @@ class PAHelper:
             tmp=sorted(tmp,key=lambda x:x[1],reverse=True)
             info.append(tmp)
             pa.WritePockets(out[i][0],os.path.join(pdb_dir,f'apocket-r{i+1:03d}.pdb'))
-            pa.rec[frame_shift+out[i][0]].save(os.path.join(pdb_dir,f'protein-r{i+1:03d}-f{frame_shift+out[i][0]*pa.offset:05d}.pdb'))
+            pa.rec[pa.shift+out[i][0]*pa.offset].save(os.path.join(pdb_dir,f'protein-r{i+1:03d}-f{pa.shift+out[i][0]*pa.offset:05d}.pdb'))
         with open(os.path.join(out_dir,'out.dat'),'w') as f:
             for i in range(len(out)):
                 if out[i][0]==-1:
                     continue
-                f.writelines(f'rank={i+1} frame={out[i][0]*pa.offset+frame_shift:6d} pock_score={out[i][1]:10.3f} pock_space={out[i][2]} main_name={out[i][3]} minor_name={out[i][4]}\n{"id":^3s} {"rank":^4s} {"socre":^6s} {"space":^7s} {"mnpr%80":^8s} {"occu":^6s} {"m_occu":^6s}\n')
+                f.writelines(f'rank={i+1} frame={out[i][0]*pa.offset+pa.shift:6d} pock_score={out[i][1]:10.3f} pock_space={out[i][2]} main_name={out[i][3]} minor_name={out[i][4]}\n{"id":^3s} {"rank":^4s} {"socre":^6s} {"space":^7s} {"mnpr%80":^8s} {"occu":^6s} {"m_occu":^6s}\n')
                 for j in info[i]:
                     f.writelines(f'{j[0]:3d} {pock_rank[j[0]]+1:4d} {j[1]:6.2f} {j[2]:7.2f} {pa.pocketsinfo.GetMeanNPR(j[0],80)*100:8.2f} {pa.pocketsinfo.GetOccupancyRatio(j[0],out[i][0]):6.4f} {mean_occu[j[0]]:6.4f}\n')
                 f.writelines('\n\n')
@@ -775,7 +776,7 @@ class PAHelper:
         #score_cutoff=kw.get('score_cutoff',10)
 
         out=pa.pocketsinfo.GetBestConf(reserve_num=reserve_num)
-        PAHelper._WriteBestFrames(pa,out_dir,out,frame_shift=frame_shift)
+        PAHelper._WriteBestFrames(pa,out_dir,out)
 
     @staticmethod
     def WriteMainBestFrames(pa:PocketsAnalysis,out_dir:str,**kw)->None:
@@ -786,14 +787,13 @@ class PAHelper:
         reserve_num=kw.get('reserve_num',1)
         percentile=kw.get('percentile',80)
         is_use_scoring=kw.get('is_use_scoring',True)
-        frame_shift=kw.get('frame_shift',0)
 
         main_list=list(pa.pocketsinfo._pocket_composition.values())
         main_list=sorted(main_list,key=lambda x:x[1],reverse=True)
         for i in main_list:
             m_out_dir=os.path.join(out_dir,f'main_{i[0]}_s{np.round(i[1])}')
             data=pa.pocketsinfo.GetMainBestConf(i[0],reserve_num=reserve_num)
-            PAHelper._WriteBestFrames(pa,m_out_dir,data,frame_shift=frame_shift,vol_v_time=False)
+            PAHelper._WriteBestFrames(pa,m_out_dir,data,vol_v_time=False)
 
     @staticmethod
     def WritePocketAccor(pa:PocketsAnalysis,out_dir:str,**kw)->None:
@@ -1104,7 +1104,7 @@ def WriteFiles(pa:PocketsAnalysis,md)->None:
         print(f'{"done":>8s}.')
     if str2bool(md.get('out_best','True')):
         print('Write best conformation...',end='')
-        PAHelper.WriteBestFrames(pa,os.path.join(out_dir,'pock_info/best_conf'),life_time_coutoff=int(md.get('best_lt_cutoff','10')),frame_shift=int(md.get('frame_start','0')),reserve_num=int(md.get('best_num','10')),is_use_scoring=str2bool(md.get('best_use_score','True')))
+        PAHelper.WriteBestFrames(pa,os.path.join(out_dir,'pock_info/best_conf'),life_time_coutoff=int(md.get('best_lt_cutoff','10')),reserve_num=int(md.get('best_num','10')),is_use_scoring=str2bool(md.get('best_use_score','True')))
         print(f'{"done":>8s}.')
     if str2bool(md.get('out_pock_info','False')):
         print('Write pocket information...',end='')
@@ -1112,7 +1112,7 @@ def WriteFiles(pa:PocketsAnalysis,md)->None:
         print(f'{"done":>8s}.')
     if str2bool(md.get('out_main_best','False')):
         print('Write main group...',end='')
-        PAHelper.WriteMainBestFrames(pa,os.path.join(out_dir,'pock_info/main_group'),life_time_coutoff=int(md.get('main_lt_cutoff','10')),frame_shift=int(md.get('frame_start','0')),reserve_num=int(md.get('main_num','1')),is_use_scoring=str2bool(md.get('main_use_score','True')))
+        PAHelper.WriteMainBestFrames(pa,os.path.join(out_dir,'pock_info/main_group'),life_time_coutoff=int(md.get('main_lt_cutoff','10')),reserve_num=int(md.get('main_num','1')),is_use_scoring=str2bool(md.get('main_use_score','True')))
         print(f'{"done":>8s}.')
     if str2bool(md.get('out_coex','False')):
         print('Write coexist & correlation matrix...',end='')
@@ -1181,7 +1181,7 @@ parser.add_argument('--dist_cutoff',type=float,default=3.0,metavar='float, defau
 
 parser.add_argument('--frame_start',type=int,default=0,metavar='integer, default=0',help='This parameter specifies which frame of the trajectory to start processing from, and frames before this parameter will be ignored')
 parser.add_argument('--frame_stop',type=int,default=-1,metavar='integer, default=-1',help='This parameter specifies the frame to which the program ends processing, and the frames after this parameter will be ignored. The default value of this parameter is the last frame')
-#parser.add_argument('--frame_offset',type=int,default=1,metavar='integer, default=1',help='This parameter specifies the frame interval step size for processing trajectories.')
+parser.add_argument('--frame_offset',type=int,default=1,metavar='integer, default=1',help='This parameter specifies the frame interval step size for processing trajectories.')
 
 parser.add_argument('--out',type=str,metavar='out_dir',default='./', help='The folder where the analysis results are saved')
 parser.add_argument('--out_summary',type=bool,metavar='bool, default=True',default=True,help='Output the sub pocket info')
@@ -1233,8 +1233,8 @@ if __name__=='__main__':
         if not 'unpickle' in config['MODEL0'].keys():
             ts=int(config[f'MODEL0'].get('frame_start','0'))
             te=int(config[f'MODEL0'].get('frame_stop','-1'))
-            #to=int(config[f'MODEL0'].get('frame_offset','1'))
-            to=1
+            to=int(config[f'MODEL0'].get('frame_offset','1'))
+            #to=1
             pa.Analysis(ts,te,to)
         WriteFiles(pa,config['MODEL0'])
         Serializing(pa,config['MODEL0'])
@@ -1261,8 +1261,8 @@ if __name__=='__main__':
                 align_id.append(np.array(ParserMask(models[i].rec,config[f'MODEL{i}']['align_mask'].strip(),mode='bb'),dtype=int))
                 ts=int(config[f'MODEL{i}'].get('frame_start','0'))
                 te=int(config[f'MODEL{i}'].get('frame_stop','-1'))
-                #to=int(config[f'MODEL{i}'].get('frame_offset','1'))
-                to=1
+                to=int(config[f'MODEL{i}'].get('frame_offset','1'))
+                #to=1
                 step.append([ts,te,to])
         print('Process model...')
         models.Analysis(step)
