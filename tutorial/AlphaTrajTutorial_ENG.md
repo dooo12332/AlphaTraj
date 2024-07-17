@@ -182,6 +182,10 @@ Starting frame for trajectory analysis. This frame is included. Default is 1.
 Ending frame for trajectory analysis. This frame is not included. Default is the last frame of the trajectory.
 **<span style="color: #ff0000;">NOTE:Extracting frames should be done as much as possible when generating processing trajectories</span>**
 
+#### `--frame_offset`:
+
+Step size for trajectory analysis. Default is 1.**<span style="color: #ff0000;">NOTE:Extracting frames should be done as much as possible when generating processing trajectories</span>**
+
 #### `--out`:
 
 Path to the folder for output results. If this folder does not exist, it will be automatically created. It is recommended to use an empty folder to store results to avoid confusion.
@@ -359,9 +363,10 @@ traj= ./traj.nc
 # Example: --box 372 18,10,22 458,963 14,12,20
 box= 2126,4357 17,26,30
 
-# Specify the starting, ending of the processed frames
+# Specify the starting, ending, and interval of the processed frames
 frame_start=500
 frame_stop=1000
+#frame_offset=
 
 # The folder where the analysis results are saved
 out= ./
@@ -500,9 +505,10 @@ traj= ./traj.nc
 box= 2126,4357 17,26,30
 
 
-# Specify the starting, ending of the processed frames
+# Specify the starting, ending, and interval of the processed frames
 frame_start=500
 frame_stop=1000
+#frame_offset=
 
 # The folder where the analysis results are saved
 out= ./
@@ -538,9 +544,9 @@ corr_sort_by='rank'
 
 #box= 
 
-
 #frame_start=
 #frame_stop=
+#frame_offset=
 
 
 # Serialized data storage location, not specifying will not save the original data. 
