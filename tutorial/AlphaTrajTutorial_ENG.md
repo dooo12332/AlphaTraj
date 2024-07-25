@@ -659,7 +659,8 @@ Pocket_group_v_time.dat: Sub-pocket group changes over time (Matrix: Rows - Fram
 Pocket_group_name_list.dat: Names of sub-pocket groups for each column in the graph of changes over time. Combinations of main group name and sub-group name.
 
 ### summary.dat
-Information about all sub-pockets.
+Information about all sub-pockets.  
+**<span style="color: #ff6464">Pocket id is the number of the pocket inside the program, the pocket id only appears in this file. "rank" is the pocket rank, all other files output the pocket number(or rank) refers to the rank.</span>**
 
 ![Explanation of summary.dat file](./_resources/summary.png)
 
