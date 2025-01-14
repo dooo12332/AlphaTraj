@@ -302,6 +302,35 @@ The cutoff value for the clustering distance during pocket matching, default is 
 Located under every \[MODE#\] tab. This parameter is only required and must be specified in multi mode. It specifies the residue sequence for overlaying multiple models. Its format is the same as rec_mask. **Each model must be specified.**  
 When comparing pockets of two systems, AlphaTraj aligns the two pocket proteins based on the align_mask parameter under each model. Thus, it's crucial to ensure that the align_mask specifies the same number and types of residues and atoms. The align_mask can be adjusted flexibly—for example, by selecting only residues that make up the pocket, which enhances the accuracy of pocket alignment. At the same time, specifying only certain residues can bypass issues arising from inconsistent residues. For example, if a protein has 300 residues and its active pocket comprises residues 20-50, but residue 35 is mutated, the align_mask would be specified as align_mask=20,35,36,51 (note the closed-open interval notation [20,35), [36,51)). The parameters should be listed in sequence separated by commas, maintaining pairs throughout. You can refer to the tutorial's explanation of the rec_mask parameter for more details (all mask specifications follow the same rules).
 
+### Running AlphaTraj (Demonstration)
+
+#### Analyzing with AlphaTraj
+Now that we understand the parameters, let's use AlphaTraj. Since it's a main protease without a bound receptor, we need to specify the pocket location first. We are interested in the region where the dimer interface of the main protease protein contacts. We want to see if it's suitable for designing inhibitors as alternative
+
+ pockets. After examining the conformations, we have chosen the center and size of the box, detailed below.
+
+| RESSEQ | NAME | SERIAL | X   | Y   | Z   |
+| --- | --- | --- | --- | --- | --- |
+| 136 | LYS CA | 2126 | 33.24 | 57.57 | 53.52 |
+| 285 | LEU CA | 4357 | 29.06 | 69.0 | 41.19 |
+|     | CENTER |     | 31.15 | 63.3 | 47.1 |
+|     | BOX SIZE |     | 17  | 26  | 30  |
+
+The diagram below illustrates the box position and size.
+
+#### Command Line Execution
+
+```shell
+python G:\data\pocket_analysis\example\AlphaTraj\pocket_analysis.py --top ./com_wat_strip.prmtop --traj ./traj.nc --box 2126,4357 17,26,30 --frame_start 500 --frame_stop 1000 --out ./ --out_pock_info true --out_main_best true --out_coex true --out_corr true --out_mtp true --out_group true
+```
+
+#### Control File Execution
+
+```shell
+python G:\data\pocket_analysis\example\AlphaTraj\pocket_analysis.py --config ./config.ini
+```
+
+A sample control file looks like this:
 #### Example confi.ini file:
 
 The parameter names and input format in the file are the same as the command line parameters. # after the hash sign is a comment.
@@ -397,61 +426,6 @@ pock_info_ftype=txt
 # In what order are the rows and columns of the coex matrix arranged
 coex_sort_by='rank'
 # In what order are the rows and columns of the corr matrix arranged
-corr_sort_by='rank'
-```
-
-### Running AlphaTraj (Demonstration)
-
-#### Analyzing with AlphaTraj
-Now that we understand the parameters, let's use AlphaTraj. Since it's a main protease without a bound receptor, we need to specify the pocket location first. We are interested in the region where the dimer interface of the main protease protein contacts. We want to see if it's suitable for designing inhibitors as alternative
-
- pockets. After examining the conformations, we have chosen the center and size of the box, detailed below.
-
-| RESSEQ | NAME | SERIAL | X   | Y   | Z   |
-| --- | --- | --- | --- | --- | --- |
-| 136 | LYS CA | 2126 | 33.24 | 57.57 | 53.52 |
-| 285 | LEU CA | 4357 | 29.06 | 69.0 | 41.19 |
-|     | CENTER |     | 31.15 | 63.3 | 47.1 |
-|     | BOX SIZE |     | 17  | 26  | 30  |
-
-The diagram below illustrates the box position and size.
-
-#### Command Line Execution
-
-```shell
-python G:\data\pocket_analysis\example\AlphaTraj\pocket_analysis.py --top ./com_wat_strip.prmtop --traj ./traj.nc --box 2126,4357 17,26,30 --frame_start 500 --frame_stop 1000 --out ./ --out_pock_info true --out_main_best true --out_coex true --out_corr true --out_mtp true --out_group true
-```
-
-#### Control File Execution
-
-```shell
-python G:\data\pocket_analysis\example\AlphaTraj\pocket_analysis.py --config ./config.ini
-```
-
-A sample control file looks like this:
-```shell
-[GENERAL]
-mode=single
-is_score=True
-
-[MODEL0]
-unpickle=./raw.dat
-
-align_mask=1,307
-
-out= ./align_model1
-
-out_summary=true
-out_best=true
-out_pock_info=true
-out_main_best=true
-out_coex=true
-out_corr=true
-out_mtp=true
-out_group=true
-
-pock_info_ftype=txt
-coex_sort_by='rank'
 corr_sort_by='rank'
 ```
 
