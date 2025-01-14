@@ -23,4 +23,17 @@ Lv, N.; Cao, Z. Subpocket-Based Analysis Approach for the Protein Pocket Dynamic
 Literature link: https://pubs.acs.org/doi/10.1021/acs.jctc.4c00476
 
 ## Additional Information:
-If you have any questions or suggestions, please feel free to contact me at lvnan@stu.xmu.edu.cn
+If you have any questions or suggestions, please feel free to contact me at lvnan@htu.edu.cn or lvnan@stu.xmu.edu.cn 
+
+
+# <font color=red>**Notice!!!**</font>  
+Due to an update in the `mdtraj` version, the `_sasa()` function interface has been modified (version 1.10.0 uses the old interface, while the current version 1.10.2 uses the new interface), which may cause runtime errors.  
+
+The last few lines of the error message are as follows:  
+```
+File "mdtraj/geometry/src/_geometry.pyx", line 227, in mdtraj.geometry._geometry._sasa
+TypeError: _sasa() takes exactly 6 positional arguments (1 given)
+```
+
+This issue has now been resolved, and AlphaTraj can run normally on both the new and old versions of `mdtraj`.  
+Users experiencing this error are advised to download the latest version of AlphaTraj.
