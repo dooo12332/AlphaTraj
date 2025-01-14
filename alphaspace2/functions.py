@@ -1,5 +1,6 @@
 from itertools import combinations_with_replacement
 
+import mdtraj.version
 import numpy as np
 from mdtraj.geometry import _geometry
 from mdtraj.geometry.sasa import _ATOMIC_RADII
@@ -8,7 +9,7 @@ from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.spatial import Voronoi, Delaunay, cKDTree
 from scipy.spatial.distance import cdist
 from scipy.spatial.distance import squareform
-
+import mdtraj
 
 def _getTetrahedronVolume(coord_list: list):
     """
@@ -179,7 +180,6 @@ def count_intersect(a, b):
     return np.count_nonzero(a + b)
 
 
-
 def getSASA(protein_snapshot, cover_atom_coords=None,frame:int=0):
     """
     Calculate the absolute solvent accessible surface area.
@@ -204,8 +204,12 @@ def getSASA(protein_snapshot, cover_atom_coords=None,frame:int=0):
     radii = np.array(atom_radii, np.float32) + probe_radius
     #print(f'radii={radii}')
     atom_mapping = np.arange(xyz.shape[1], dtype=np.int32)
+    atom_selection_mask = np.ones(xyz.shape[1], dtype=np.int32)
     out = np.zeros((1, xyz.shape[1]), dtype=np.float32)
-    _geometry._sasa(xyz[frame:frame+1,:,:], radii, int(n_sphere_points), atom_mapping, out)
+    try:
+        _geometry._sasa(xyz=xyz[frame:frame+1,:,:], atom_radii=radii, n_sphere_points=int(n_sphere_points), atom_outmapping=atom_mapping, out=out,atom_selection_mask=atom_selection_mask)
+    except:
+        _geometry._sasa(xyz=xyz[frame:frame+1,:,:], atom_radii=radii, n_sphere_points=int(n_sphere_points), atom_outmapping=atom_mapping, out=out)
     #print('done getSASA')
     return out[:, :protein_snapshot.xyz.shape[1]][0]
     
