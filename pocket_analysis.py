@@ -20,33 +20,33 @@ class SnapShots:
         #al.annotateVinaAtomTypes(pdbqt=rec_pdbqt, receptor=self.rec)
         self.sslist:List[al.Snapshot.Snapshot]=[]
 
-        self.boxCenterAtomId:List[List[int]]=[]
-        self.boxlen:List[List[float]]=[]
+        self.boxs:List[Tuple[List]]=[]#[(boxCenterAtomId,boxlen)]
+        #boxCenterAtomId:List[List[int]]=[]
+        #boxlen:List[List[float]]=[]
         
         self.lig_cutoff=3.0
 
     def __getitem__(self,id:int):
         return self.sslist[id]
 
-    def SetBox(self,center_atom_id:List[List[int]],length:List[List[float]]):
-        self.boxCenterAtomId=center_atom_id
-        self.boxlen=length
+    def AddBox(self,center_atom_id:List[List[int]],length:List[List[float]]):
+        self.boxs.append((center_atom_id,length))
+
+    def ReetBox(self):
+        self.boxs=[]
 
     def SetLigCutoff(self,lig_cutoff:float):
         self.lig_cutoff=lig_cutoff
 
-    def _CalcBoxEdge(self,frame:int)->np.ndarray:
+    def _CalcBoxEdge(self,box:tuple,frame:int)->np.ndarray:
         xyz=np.squeeze(self.rec[frame].xyz*10,0)
-        box_num=len(self.boxCenterAtomId)
-        out=np.zeros((box_num,6))
-        for i in range(box_num):
-            txyz=np.average(xyz[np.array(self.boxCenterAtomId[i])-1],axis=0)
-            out[i,0]=txyz[0]-self.boxlen[i][0]/2.
-            out[i,1]=txyz[0]+self.boxlen[i][0]/2.
-            out[i,2]=txyz[1]-self.boxlen[i][1]/2.
-            out[i,3]=txyz[1]+self.boxlen[i][1]/2.
-            out[i,4]=txyz[2]-self.boxlen[i][2]/2.
-            out[i,5]=txyz[2]+self.boxlen[i][2]/2.
+        (boxCenterAtomId,boxLen) = box
+        box_center_xyz=np.mean(xyz[boxCenterAtomId],axis=0)
+
+        half_box_len = np.array(boxLen) / 2.
+        out = np.zeros((1, 6))
+        out[0, [0,2,4]] = box_center_xyz - half_box_len
+        out[0, [1,3,5]] = box_center_xyz + half_box_len
         return out
 
     def Process(self,start:int=0,stop:int=-1,offset:int=1,rec_mask:np.ndarray=np.array([]),lig_mask:np.ndarray=np.array([])):
@@ -63,9 +63,9 @@ class SnapShots:
         print(f'start generate snapshots list({start}:{stop}:{offset}). This may take a long time...')
         for i in tqdm(range(start,stop,offset),desc='Processing',unit='frame',unit_scale=True):
             self.sslist.append(al.Snapshot(lig_cutoff=self.lig_cutoff))
-            if len(self.boxCenterAtomId)!=0:
-                #print(f'boxedge={self._CalcBoxEdge(i)}')
-                self.sslist[-1].SetBox(self._CalcBoxEdge(i))
+            for box in self.boxs:
+            #print(f'boxedge={self._CalcBoxEdge(i)}')
+                self.sslist[-1].AddBox(self._CalcBoxEdge(box,i))
             self.sslist[-1].run(receptor=self.rec,frame=i,rec_mask=rec_mask,lig_mask=lig_mask)
 
     def GetPockComposition(self,frame:int,pid:int)->List[int]:
@@ -487,6 +487,7 @@ class PocketsAnalysis:
         else:
             self.rec_mask-=1
         
+        self.center()
         self.rec.superpose(self.rec,0,self.rec_mask)
         self.snap_shots=SnapShots(rec)
         self.pocketsinfo=PocketsInfo()
@@ -496,6 +497,15 @@ class PocketsAnalysis:
         self.is_use_score=kw.get('is_use_score',True)
         self.percentile=kw.get('percentile',80.0)
         #score_cutoff:float=0,percentile:int=80,is_use_scoring:bool=True
+
+    def center(self)->None:
+        """
+        Compute the geometric center of all atoms in self.rec and translate it to the origin.
+        """
+        # Compute the geometric center (mean of all atomic positions)
+        cog = np.mean(self.rec.xyz, axis=1, keepdims=True)  # Shape: (n_frames, 1, 3)
+        # Translate all coordinates so that the center of geometry is at the origin
+        self.rec.xyz -= cog
 
     def size(self)->int:
         '''
@@ -509,6 +519,7 @@ class PocketsAnalysis:
         for ss in self.snap_shots.sslist:
             total_coords.append(ss._pocket_xyz)
         total_coords=np.concatenate(total_coords,axis=0)
+        total_coords=total_coords.astype(np.float16)
         #pocket clustering
         self.pocketsinfo._pockets_cluter_id=fcluster(linkage(total_coords, method='average'), self.distance_cutoff,criterion='distance')
         self.pocketsinfo._pockets_cluter_id-=1
@@ -587,17 +598,15 @@ class PocketsAnalysis:
             #self.snap_shots[i].Rotate(R)
         return True
 
-    def SetBox(self,center_atom_id:List[List[int]],length:List[List[float]]):
-        if len(center_atom_id)!=len(length):
-            print('Input parameter dimension mismatch!')
-        else:
-            is_set=True
-            for i in length:
-                if len(i)!=3:
-                    print('Dimension mismatch of parameter length')
-                    break
-            if is_set:
-                self.snap_shots.SetBox(center_atom_id,length)
+    def AddBox(self,center_atom_id:List[List[int]],length:List[List[float]]):
+        if len(length)!=3:
+            print('Dimension mismatch of parameter length')
+            return
+        print(f'Add box [{center_atom_id}]({length})')
+        self.snap_shots.AddBox(center_atom_id,length)
+
+    def ResetBos(self):
+        self.snap_shots.ResetBox()
 
     def isUseScore(self,is_use_score:bool):
         self.is_use_score=is_use_score
@@ -997,22 +1006,20 @@ def ParserGeneral(md)->dict:
     
     return out
 
-def ParserBox(input:List[str])->Tuple[List[List[int]],List[List[float]]]:
-    atom_id=[]
-    length=[]
-    tmp=[]
-    for group in input:
-        if len(group)!=2:
-            print('Wrong number of box parameters!')
-            exit()
-        tmp=group[0].split(',')
-        atom_id.append(list(map(int,tmp)))
-        tmp=group[1].split(',')
-        if len(tmp)!=3:
-            print('Wrong number of box length parameters!')
-            exit()
-        length.append(list(map(float,tmp)))
-    return (atom_id,length)
+def ParserBox(input:List[str]):
+    boxs=[]
+    k=0
+    for string in input:
+        if k==0: 
+            tmp=string.split(',')
+            atom_id=list(map(int,tmp))
+            k=1
+        else:
+            tmp=string.split(',')
+            length=list(map(float,tmp))
+            k=0
+            boxs.append((atom_id,length))
+    return boxs
 
 def ParserMask(protein:mdtraj.Trajectory,instr:str,mode:str='all')->List[int]:
     inlist=instr.split(',')
@@ -1074,16 +1081,14 @@ def GetPA(md,gparam)->PocketsAnalysis:
     if 'box' in md.keys() and len(md['box'])!=0:
         print('Parse Box...',end='')
         if type(md['box'])==str:
-            tmp=md['box'].split()
-            if len(tmp)==0 or len(tmp)%2==1:
+            box_list=md['box'].split()
+            if len(box_list)==0 or len(box_list)%2==0:
                 print('Wrong number of box parameters!')
-            box_list=[]
-            for i in range(0,len(tmp),2):
-                box_list.append([tmp[i],tmp[i+1]])
         else:
             box_list=md['box']
-        atom_id,box_length=ParserBox(box_list)
-        pa.SetBox(atom_id,box_length)
+        boxs=ParserBox(box_list)
+        for box in boxs:
+            pa.AddBox(box[0],box[1])
         print(f'{"done":>8s}.\n')
 
     pa.SetDistCutoff(gparam['dist_cutoff'])

@@ -108,6 +108,37 @@ run
 quit
 ```
 
+**Attention!** If you have stripped certain protein residues (or any other proteins, custom amino acids, etc.), causing residue numbering to become discontinuous, AlphaTraj will automatically renumber subsequent residues upon import. Therefore, ensure that your `rec_mask` and `lig_mask` specify the correct residue numbers.
+
+For example:  
+- Before stripping: Protein residues **1-444**, DOPC membrane **445-1136**, ligand **1137**, ions **1138-1200**, water **1201-...**  
+- After stripping DOPC, ions, and water: Protein residues **1-444**, ligand **445**  
+
+If you are unsure of the residue numbering, you can create a new script named `get_residues.py` in the directory containing your trajectory and topology files. Copy the following script into it and execute it. After running, a `residues.txt` file will be generated in the current directory, listing the residue indices.
+
+Run the script using the following command:  
+```bash
+python get_residues.py your_top_file_name.prmtop your_traj_file_name.nc
+```
+
+```python
+import mdtraj as md
+import sys
+
+top = sys.argv[1]
+traj = sys.argv[2] 
+
+mdtraj = md.load(traj, top=top)
+top = mdtraj.topology
+
+with open('residues.txt', 'w') as f:
+    for res in top.residues:
+        f.write(f'{res.index} {res.name}\n')
+```
+
+This script extracts residue indices from the topology file and writes them to `residues.txt`, allowing you to verify the numbering before proceeding with further analysis.
+
+
 1. After processing, the files in the folder look as follows:
 ![The folder content after generating new trajectories and topologies](./_resources/7f39d7a120b1189426f10164d3f78738.png)
 ## Using AlphaTraj
@@ -150,17 +181,19 @@ Example: If you want to specify residues 30-50, 60, and 80-101, it should be wri
 
 Specify the residue numbers of the ligand. Format is the same as `rec_mask`. When a ligand is specified, alpha spheres too far from the ligand will be automatically removed.
 
+Note: When both `--box` and `--lig_mask` are specified, only the `--box` parameter will be used to filter alpha spheres. However, the average occupancy of the resulting pocket will be calculated based on `--lig_mask`.
+
 #### `--box`:
 
 By default, the program analyzes the entire surface of the protein, which may be time-consuming and require more memory. If you are only interested in a specific region of the protein, you can specify this parameter to limit the search range, greatly speeding up the analysis. If one box does not fit the shape of the pocket well, you can specify multiple boxes. The program will consider the range covered by all specified boxes.
 
 Note 1: If `lig_mask` is specified, alpha spheres too far from the ligand will be automatically filtered out, so this parameter is not required.
 
-Note 2: Each box needs a `--box` parameter; multiple boxes cannot be specified within one parameter.
+Note 2: When both `--box` and `--lig_mask` are specified, only the `--box` parameter will be used to filter alpha spheres. However, the average occupancy of the resulting pocket will be calculated based on `--lig_mask`.
 
 Format: `--box atom1_id,atom2_id length(X-axis direction),width(Y-axis direction),height(Z-axis direction)` This parameter consists of two parts: the first part specifies the center of the box, with the center being the geometric center of the specified atoms. Atom IDs are separated by commas (","). The second part specifies the size of the box.
 
-Example: `--box 372 18,10,22 458,963 14,12,20`
+Example: If you want to specify two boxes, where the first box is centered on atom 372 with dimensions 18, 10, 22, and the second box is centered on the geometric center of atoms 458 and 963 with dimensions 14, 22, 20, then the parameter should be:`--box 372 18,10,22 458,963 14,12,20`
 
 #### `--lig_cutoff`:
 

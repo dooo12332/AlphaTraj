@@ -19,7 +19,7 @@ class Snapshot:
     def __init__(self,**kw):
         #New parameters
         self._filter_alphas_byloc=False
-        self.box_rng:np.ndarray=np.zeros((1,6))
+        self.boxs:List[np.ndarray]=[]
         self.lig_cutoff=kw.get('lig_cutoff',4.0)
         #end
 
@@ -27,7 +27,7 @@ class Snapshot:
         self.elements = None
         self.atom_names = None
 
-        self._alpha_xyz = None#np.ndarray (n*3)
+        self._alpha_xyz = None#np.ndarray (n*3) angstorm
         self._alpha_space = None#np.ndarray (n)
         self._alpha_space_nonpolar_ratio = None#np.ndarray (n)
         self._alpha_contact = None#np.ndarray (n)
@@ -64,6 +64,7 @@ class Snapshot:
             protein_coords = receptor.xyz[frame][rec_mask] * 10.0
         else:
             protein_coords = receptor.xyz[frame] * 10.0
+        protein_coords=protein_coords.astype(np.float32)
         #print('genAlphas 3')
         raw_alpha_lining_idx = Delaunay(protein_coords).simplices
         #print('genAlphas 4')
@@ -92,7 +93,7 @@ class Snapshot:
         #print('genAlphas 12')
         #print(f'raw_alpha_xyz.shape={raw_alpha_xyz.shape}')
         #print(f'filtered_alpha_idx.shape={filtered_alpha_idx.shape}')
-        self._alpha_xyz = np.take(raw_alpha_xyz, filtered_alpha_idx, axis=0)
+        self._alpha_xyz = np.take(raw_alpha_xyz, filtered_alpha_idx, axis=0).astype(np.float32)
         #print('genAlphas 13')
 
     def genBetas(self):
@@ -141,7 +142,7 @@ class Snapshot:
         for i, indices in enumerate(self._pocket_alpha_index_list):
             pxyz[i] = np.mean(self._alpha_xyz[indices], axis=0)
             self._pocket_space[i] = np.sum(self._alpha_space[indices], axis=0)
-        self._pocket_xyz=np.stack(pxyz,axis=0)
+        self._pocket_xyz=np.stack(pxyz,axis=0).astype(np.float32)
 
     def genBScore(self, receptor,frame=0,rec_mask:np.ndarray=np.array([])):
         from .VinaScoring import _pre_process_pdbqt, _get_probe_score
@@ -189,10 +190,15 @@ class Snapshot:
         #print(f'genAlphas(receptor,frame) frame[{frame}]')
         self.genAlphas(receptor,frame,rec_mask)
         if  self._filter_alphas_byloc:
+            #print('filter alphas by loc...')
             self.FilterAlphasByLoc()
         if rec_mask.shape[0]!=0 and lig_mask.shape[0]!=0:
+            #print('calc lig xyz')
             lig_xyz=receptor.xyz[frame][lig_mask] * 10.0
-            self.FilterAlphasByLig(lig_xyz)
+            if not self._filter_alphas_byloc:
+                #print('filter by lig mask')
+                self.FilterAlphasByLig(lig_xyz)
+            #print(lig_xyz)
         #print(f'genPockets()')
         self.genPockets()
         #print(f'genBetas()')
@@ -209,7 +215,6 @@ class Snapshot:
 
             self._pocket_contact = np.array(
                 [np.any(self._alpha_contact[alpha_indices]) for alpha_indices in self._pocket_alpha_index_list])
-        
 
     @property
     def pockets(self):
@@ -248,59 +253,78 @@ class Snapshot:
             write_snapshot(output_dir, self, receptor=receptor, binder=binder, chimera_scripts=chimera_scripts,
                            contact_only=False)
 
-    def SetBox(self,box:np.ndarray):#n*6 [[x_min,x_max,y_min,y_max,z_min,z_max]]
+    def AddBox(self,box:np.ndarray):#n*6 [[x_min,x_max,y_min,y_max,z_min,z_max]]
         self._filter_alphas_byloc=True
-        self.box_rng=box
+        self.boxs.append(box)
+
+    def ResetBox(self):
+        self.boxs=[]
+
+    def _FilterAlphasByLoc(self,box:np.ndarray):
+        '''
+        Filter Alpha by box\n
+        box:np.array=np.array([x_min,  x_max, y_min, y_max, z_min, z_max]))
+        '''
+        #print('start filter alpha by box...     ',end='')
+        alphas = self._alpha_xyz #alphas.shape=(n,3)
+        global_mask = (
+            ((alphas[:, 0] > box[0,0]) & (alphas[:, 0] < box[0,1])) &
+            ((alphas[:, 1] > box[0,2]) & (alphas[:, 1] < box[0,3])) &
+            ((alphas[:, 2] > box[0,4]) & (alphas[:, 2] < box[0,5]))
+        )
+
+        candidate_indices = np.where(global_mask)[0]
+
+        return candidate_indices
+
+    def _SetAlphas(self,alpha_indeces):
+        self._alpha_xyz = self._alpha_xyz[alpha_indeces]
+        self._alpha_space = self._alpha_space[alpha_indeces]
+        self._alpha_space_nonpolar_ratio = self._alpha_space_nonpolar_ratio[alpha_indeces]
 
     def FilterAlphasByLoc(self):
-        #print('start filter alpha by box...     ',end='')
-        osize=self._alpha_space.shape[0]
-        limit:np.ndarray=self.box_rng
-        new_alpha_xyz=[]
-        new_alpha_space=[]
-        new_alpha_space_nonpolar_ratio=[]
-        for i in range(self._alpha_xyz.shape[0]):
-            x,y,z=self._alpha_xyz[i]
-            #print(f'id={i},x={x},y={y},z={z}')
-            for j in range(limit.shape[0]):
-                if x > limit[j,0] and x < limit[j,1] and y > limit[j,2] and y < limit[j,3] and z > limit[j,4] and z < limit[j,5]:
-                    new_alpha_xyz.append([x,y,z])
-                    new_alpha_space.append(self._alpha_space[i])
-                    new_alpha_space_nonpolar_ratio.append(self._alpha_space_nonpolar_ratio[i])
-                    break
-        #print(self._alpha_xyz.shape)
-        #print(len(new_alpha_xyz))
-        self._alpha_xyz=np.array(new_alpha_xyz)
-        self._alpha_space=np.array(new_alpha_space)
-        self._alpha_space_nonpolar_ratio=np.array(new_alpha_space_nonpolar_ratio) 
-        #print(f'done.[{osize}]->[{self._alpha_space.shape[0]}]')
+        indeces=[]
+        for box in self.boxs:
+            indeces.append(self._FilterAlphasByLoc(box))
+        
+        intersection = indeces[0]
+        for indece in indeces[1:]:
+            intersection = np.intersect1d(intersection, indece)
 
-    def FilterAlphasByLig(self,lig_xyz:np.ndarray):
-        #print('start filter alpha by lig...     ',end='')
-        osize=self._alpha_space.shape[0]
-        l=np.zeros((lig_xyz.shape[0],6))
-        l[:,:3]=lig_xyz-self.lig_cutoff
-        l[:,3:]=lig_xyz+self.lig_cutoff
-        box=[np.min(l[:,0]),np.max(l[:,3]),np.min(l[:,1]),np.max(l[:,4]),np.min(l[:,2]),np.max(l[:,5])]
-        new_alpha_xyz=[]
-        new_alpha_space=[]
-        new_alpha_space_nonpolar_ratio=[]
-        for i in range(self._alpha_xyz.shape[0]):
-            x,y,z=self._alpha_xyz[i]
-            #print(f'id={i},x={x},y={y},z={z}')
-            if x>box[0] and x<box[1] and y>box[2] and y<box[3] and z>box[4] and z<box[5]:
-                for j in range(lig_xyz.shape[0]):
-                    if x>l[j,0] and x<l[j,3] and y>l[j,1] and y<l[j,4] and z>l[j,2] and z<l[j,5]:
-                        new_alpha_xyz.append([x,y,z])
-                        new_alpha_space.append(self._alpha_space[i])
-                        new_alpha_space_nonpolar_ratio.append(self._alpha_space_nonpolar_ratio[i])
-                        break
-        #print(self._alpha_xyz.shape)
-        #print(len(new_alpha_xyz))
-        self._alpha_xyz=np.array(new_alpha_xyz)
-        self._alpha_space=np.array(new_alpha_space)
-        self._alpha_space_nonpolar_ratio=np.array(new_alpha_space_nonpolar_ratio) 
-        #print(f'done.[{osize}]->[{self._alpha_space.shape[0]}]')
+        self._SetAlphas(intersection)
+
+    def FilterAlphasByLig(self, lig_xyz: np.ndarray):
+        # 构造每个配体的包围盒：每行格式 [x_min, y_min, z_min, x_max, y_max, z_max]
+        lig_boxes = np.hstack([lig_xyz - self.lig_cutoff, lig_xyz + self.lig_cutoff])
+
+        # 计算全局包围盒（用于初步筛选）
+        global_box = np.array([
+            lig_boxes[:, 0].min(),  # 全部配体的 x_min
+            lig_boxes[:, 3].max(),  # 全部配体的 x_max
+            lig_boxes[:, 1].min(),  # 全部配体的 y_min
+            lig_boxes[:, 4].max(),  # 全部配体的 y_max
+            lig_boxes[:, 2].min(),  # 全部配体的 z_min
+            lig_boxes[:, 5].max()   # 全部配体的 z_max
+        ])
+
+        # 获取候选α原子的索引及对应坐标
+        candidate_indices = self._FilterAlphasByLoc(global_box)
+        alpha_candidates = self._alpha_xyz[candidate_indices]
+
+        # 利用广播，检查每个候选点是否落在任一配体盒内
+        # 分别比较x, y, z三个坐标
+        cond_x = (alpha_candidates[:, 0][:, None] > lig_boxes[:, 0][None, :]) & (alpha_candidates[:, 0][:, None] < lig_boxes[:, 3][None, :])
+        cond_y = (alpha_candidates[:, 1][:, None] > lig_boxes[:, 1][None, :]) & (alpha_candidates[:, 1][:, None] < lig_boxes[:, 4][None, :])
+        cond_z = (alpha_candidates[:, 2][:, None] > lig_boxes[:, 2][None, :]) & (alpha_candidates[:, 2][:, None] < lig_boxes[:, 5][None, :])
+
+        # 组合三个条件，并对每个候选点取或运算（只要落在任一配体盒中即可）
+        in_any_box = np.any(cond_x & cond_y & cond_z, axis=1)
+
+        # 最终满足条件的α原子在原数组中的索引
+        final_indices = candidate_indices[in_any_box]
+
+        # 更新α原子及相关属性
+        self._SetAlphas(final_indices)
 
     def Translation(self,T:np.ndarray):
         if T.shape[0]==1 and T.shape[1]==3:
