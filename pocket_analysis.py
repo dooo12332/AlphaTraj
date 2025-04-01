@@ -1079,11 +1079,11 @@ def GetPA(md,gparam)->PocketsAnalysis:
     pa.SetLigCutoff(lig_cutoff)
 
     if 'box' in md.keys() and len(md['box'])!=0:
-        print('Parse Box...',end='')
+        print('Parse Box...')
         if type(md['box'])==str:
             box_list=md['box'].split()
-            if len(box_list)==0 or len(box_list)%2==0:
-                print('Wrong number of box parameters!')
+            if len(box_list)==0 or len(box_list)%2==1:
+                print('Wrong number of box parameters!',end='')
         else:
             box_list=md['box']
         boxs=ParserBox(box_list)

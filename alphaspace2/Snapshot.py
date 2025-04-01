@@ -308,7 +308,7 @@ class Snapshot:
         ])
 
         # 获取候选α原子的索引及对应坐标
-        candidate_indices = self._FilterAlphasByLoc(global_box)
+        candidate_indices = self._FilterAlphasByLoc(global_box.reshape((1,6)))
         alpha_candidates = self._alpha_xyz[candidate_indices]
 
         # 利用广播，检查每个候选点是否落在任一配体盒内
