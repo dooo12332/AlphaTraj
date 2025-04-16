@@ -108,7 +108,16 @@ run
 quit
 ```
 
-**Attention!** If you have stripped certain protein residues (or any other proteins, custom amino acids, etc.), causing residue numbering to become discontinuous, AlphaTraj will automatically renumber subsequent residues upon import. Therefore, ensure that your `rec_mask` and `lig_mask` specify the correct residue numbers.
+🔴**Attention!:** The purpose of `autoimage` is to move the protein to the center of the box in order to prevent coordinate issues caused by the protein crossing periodic boundaries, which could otherwise lead to errors during analysis. However, `autoimage` does not always perform this repositioning effectively, and the protein may still span across the periodic boundary. In such cases, you can try replacing it with the following commands:
+
+```shell
+center :42-45
+image
+```
+
+The `center` command is used to specify atoms or residues, and it will calculate the geometric center of the selected atoms. The subsequent `image` command will then move this calculated geometric center to the center of the simulation box. In most cases, simply specifying a single residue near the center of the protein is sufficient for the operation to work well.
+
+🔴**Attention!:** If you have stripped certain protein residues (or any other proteins, custom amino acids, etc.), causing residue numbering to become discontinuous, AlphaTraj will automatically renumber subsequent residues upon import. Therefore, ensure that your `rec_mask` and `lig_mask` specify the correct residue numbers.
 
 For example:  
 - Before stripping: Protein residues **1-444**, DOPC membrane **445-1136**, ligand **1137**, ions **1138-1200**, water **1201-...**  
@@ -175,7 +184,7 @@ Format: `--rec_mask res_id_start,res_id_stop,res_id_start,res_id_stop...` (Note:
 
 Example: If you want to specify residues 30-50, 60, and 80-101, it should be written as: `--rec_mask 30,51,60,61,80,102`
 
-<span style="color: #ff6464">**Note: Please pay careful attention to the writing of this parameter. The residues of this parameter must appear in pairs, even for a single residue, a pair of residue numbers must be specified. The residue pair is a semi inclusion interval, where the starting residue is included and the ending residue is not included**</span>
+🔴**Note:** Please pay careful attention to the writing of this parameter. The residues of this parameter must appear in pairs, even for a single residue, a pair of residue numbers must be specified. The residue pair is a semi inclusion interval, where the starting residue is included and the ending residue is not included
 
 #### `--lig_mask`:
 
@@ -187,9 +196,9 @@ Note: When both `--box` and `--lig_mask` are specified, only the `--box` paramet
 
 By default, the program analyzes the entire surface of the protein, which may be time-consuming and require more memory. If you are only interested in a specific region of the protein, you can specify this parameter to limit the search range, greatly speeding up the analysis. If one box does not fit the shape of the pocket well, you can specify multiple boxes. The program will consider the range covered by all specified boxes.
 
-Note 1: If `lig_mask` is specified, alpha spheres too far from the ligand will be automatically filtered out, so this parameter is not required.
+**Note 1:** If `lig_mask` is specified, alpha spheres too far from the ligand will be automatically filtered out, so this parameter is not required.
 
-Note 2: When both `--box` and `--lig_mask` are specified, only the `--box` parameter will be used to filter alpha spheres. However, the average occupancy of the resulting pocket will be calculated based on `--lig_mask`.
+**Note 2:** When both `--box` and `--lig_mask` are specified, only the `--box` parameter will be used to filter alpha spheres. However, the average occupancy of the resulting pocket will be calculated based on `--lig_mask`.
 
 Format: `--box atom1_id,atom2_id length(X-axis direction),width(Y-axis direction),height(Z-axis direction)` This parameter consists of two parts: the first part specifies the center of the box, with the center being the geometric center of the specified atoms. Atom IDs are separated by commas (","). The second part specifies the size of the box.
 
@@ -203,21 +212,25 @@ This parameter is also a distance cutoff value. When there is a ligand in the sy
 
 Distance cutoff value during clustering of sub-pockets using hierarchical clustering to form flat clusters.
 
-<span style="color: #ff0000;">**Note: This parameter is crucial; adjusting it will directly affect the clustering results of the pockets. The default value has been tested to be suitable, and in most cases, there is no need to change this parameter.**</span>
+🔴**Note:** This parameter is crucial; adjusting it will directly affect the clustering results of the pockets. The default value has been tested to be suitable, and in most cases, there is no need to change this parameter.
 
 #### `--frame_start`:
 
 Starting frame for trajectory analysis. This frame is included. Default is 1.
-**<span style="color: #ff0000;">NOTE:Extracting frames should be done as much as possible when generating processing trajectories</span>**
+
+🔴**NOTE:** Extracting frames should be done as much as possible when generating processing trajectories
 
 #### `--frame_stop`:
 
 Ending frame for trajectory analysis. This frame is not included. Default is the last frame of the trajectory.
-**<span style="color: #ff0000;">NOTE:Extracting frames should be done as much as possible when generating processing trajectories</span>**
+
+🔴**NOTE:** Extracting frames should be done as much as possible when generating processing trajectories
 
 #### `--frame_offset`:
 
-Step size for trajectory analysis. Default is 1.**<span style="color: #ff0000;">NOTE:Extracting frames should be done as much as possible when generating processing trajectories</span>**
+Step size for trajectory analysis. Default is 1.
+
+🔴**NOTE:** Extracting frames should be done as much as possible when generating processing trajectories
 
 #### `--out`:
 
@@ -310,9 +323,9 @@ Firstly, let's introduce several parameters unique to the control file mode:
 
 Names enclosed in \[\] are tab names. The \[GENERAL\] tab is used to set global parameters. The \[MODEL\*\] tab is used to set model parameters, where \* is a number (starting from 0, in sequential order). If mode=single, only \[MODEL0\] needs to be specified. If mode=multi, additional tabs can be specified like \[MODEL1\], \[MODEL2\], and so on.
 
-**<span style="color: #ff6464">The [GENERAL] tab includes mode and align_ Mask, dist_ Cutoff, is_ Use_ Score, percentage, score_ Cut off these parameters, and the other parameters are in the \ [MODE \ * \] tab.</span>**
+🔴**<span style="color: #ff6464">The [GENERAL] tab includes mode and align_ Mask, dist_ Cutoff, is_ Use_ Score, percentage, score_ Cut off these parameters, and the other parameters are in the \ [MODE \ * \] tab.</span>**
 
-<span style="color: #ff6464">**Tabs cannot be omitted, otherwise parameters cannot be read correctly. A control file must include the \ [GENERAL \] and \ [MODEL0 \] tabs, otherwise an error will also be reported.**</span>
+🔴<span style="color: #ff6464">**Tabs cannot be omitted, otherwise parameters cannot be read correctly. A control file must include the \ [GENERAL \] and \ [MODEL0 \] tabs, otherwise an error will also be reported.**</span>
 
 #### `mode`:
 
