@@ -1035,7 +1035,7 @@ def ParserMask(protein:mdtraj.Trajectory,instr:str,mode:str='all')->List[int]:
     return atomid
 
 def GetPA(md,gparam)->PocketsAnalysis:
-    if 'unpickle' in md.keys() and len(md['unpickle'])!=0:
+    if 'unpickle' in md.keys() and md['unpickle'] !=None:
         print('Start deserializing data...',end='')
         ppath=md['unpickle']
         if not os.path.exists(ppath):
@@ -1235,7 +1235,7 @@ if __name__=='__main__':
     if config['GENERAL']['mode']=='single':
         print('single mode')
         pa=GetPA(config['MODEL0'],gparam)
-        if not 'unpickle' in config['MODEL0'].keys():
+        if not 'unpickle' in config['MODEL0'].keys() or config['MODEL0']['unpickle']==None:
             ts=int(config[f'MODEL0'].get('frame_start','0'))
             te=int(config[f'MODEL0'].get('frame_stop','-1'))
             to=int(config[f'MODEL0'].get('frame_offset','1'))
@@ -1258,7 +1258,7 @@ if __name__=='__main__':
                 # for k,v in config[f'MODEL{i}'].items():
                 #     print(f'{k} : {v}')
                 models.AddPA(GetPA(config[f'MODEL{i}'],gparam))
-                if not 'unpickle' in config[f'MODEL{i}'].keys():
+                if not 'unpickle' in config[f'MODEL{i}'].keys() or config[f'MODEL{i}']['unpickle']==None:
                     models.need_analysis.append(i)
                 if not 'align_mask' in config[f'MODEL{i}']:
                     print('error! align_mask not set')
