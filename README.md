@@ -27,13 +27,4 @@ If you have any questions or suggestions, please feel free to contact me at lvna
 
 
 # <font color=red>**Notice!!!**</font>  
-Due to an update in the `mdtraj` version, the `_sasa()` function interface has been modified (version 1.10.0 uses the old interface, while the current version 1.10.2 uses the new interface), which may cause runtime errors.  
-
-The last few lines of the error message are as follows:  
-```
-File "mdtraj/geometry/src/_geometry.pyx", line 227, in mdtraj.geometry._geometry._sasa
-TypeError: _sasa() takes exactly 6 positional arguments (1 given)
-```
-
-This issue has now been resolved, and AlphaTraj can run normally on both the new and old versions of `mdtraj`.  
-Users experiencing this error are advised to download the latest version of AlphaTraj.
+**<span style="color:red">MDTraj introduced changes to the Topology/Atom interfaces in versions above 3.10.3, which makes it incompatible with AlphaTraj. Therefore, do not install MDTraj versions newer than 3.10.3. Please strictly follow the installation commands in this tutorial to avoid bugs caused by using an incompatible MDTraj version.</span>**

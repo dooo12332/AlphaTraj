@@ -24,15 +24,17 @@ AlphaTraj is a Python script that relies on Python to run. Please make sure that
 
 The following code demonstrates how to create an environment and install the required packages:
 
+**<span style="color:red">Note: You must explicitly specify both the Python and MDTraj versions; otherwise, errors may occur. MDTraj introduced breaking changes to the Topology/Atom interfaces in Python 3.11, making it incompatible with AlphaTraj. The Python version requirement is therefore necessary to ensure compatibility with the selected MDTraj version.</span>**
+
 ```shell
 # Create an environment, -n is followed by the environment name. (You can use any name you like; here we use alphaTraj)
-conda create -n alphaTraj
+conda create -n alphaTraj python=3.9
 # Activate the created environment
 conda activate alphaTraj
 # Install the required packages
 conda install scipy
 conda install tqdm
-conda install -c conda-forge mdtraj
+conda install -c conda-forge mdtraj=1.10.3
 ```
 
 <span style="color: #c8c8c8;">*Note: After configuring the Anaconda environment, you need to activate the environment before each use.*</span>
