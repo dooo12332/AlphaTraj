@@ -31,13 +31,67 @@ def _getTetrahedronVolumes(coord_group_list):
 
     return volumes
 
-def _getNonpolarRatio(protein_snapshot, alpha_lining_idx,frame:int=0):
-    areas = getSASA(protein_snapshot=protein_snapshot,frame=frame)
+def _sasaAreas(protein_snapshot, frame:int, atom_indices, radii=None,
+               probe_radius=0.14, n_sphere_points=960):
+    """
+    Per-atom SASA (nm^2) for a subset of receptor atoms of a single frame.
+
+    Coordinates are gathered straight from ``protein_snapshot.xyz[frame]``, so no
+    full-trajectory copy is made. The mdtraj ``_sasa()`` signature differs between
+    versions; the call is attempted with the new keyword interface first and falls
+    back to the old positional one (mirrors the existing convention).
+    """
+    atom_indices = np.asarray(atom_indices, dtype=np.intp)
+    n = atom_indices.shape[0]
+    if n == 0:
+        return np.zeros(0, dtype=np.float32)
+
+    if radii is None:
+        radii = np.empty(protein_snapshot.n_atoms, dtype=np.float32)
+        for atom in protein_snapshot.topology.atoms:
+            radii[atom.index] = _ATOMIC_RADII[atom.element.symbol]
+    atom_radii = (radii[atom_indices] + probe_radius).astype(np.float32)
+
+    xyz = np.ascontiguousarray(protein_snapshot.xyz[frame, atom_indices], dtype=np.float32)
+    atom_outmapping = np.arange(n, dtype=np.int32)
+    out = np.zeros((1, n), dtype=np.float32)
+    try:
+        _geometry._sasa(xyz=xyz[np.newaxis, :, :], atom_radii=atom_radii,
+                        n_sphere_points=int(n_sphere_points), atom_outmapping=atom_outmapping,
+                        out=out, atom_selection_mask=np.ones(n, dtype=np.int32))
+    except Exception:
+        _geometry._sasa(xyz=xyz[np.newaxis, :, :], atom_radii=atom_radii,
+                        n_sphere_points=int(n_sphere_points), atom_outmapping=atom_outmapping,
+                        out=out)
+    return out[0]
 
 
-    is_nonpolar = np.array(
-        [atom.element not in [element.oxygen,element.nitrogen,element.sulfur]
-         for atom in protein_snapshot.topology.atoms]).astype(int)
+def _getNonpolarRatio(protein_snapshot, alpha_lining_idx, frame:int=0, sasa_atoms=None):
+    """
+    SASA-weighted nonpolar fraction of the four lining atoms of every alpha sphere.
+
+    Parameters
+    ----------
+    protein_snapshot : mdtraj.Trajectory
+    alpha_lining_idx : (n_alpha, 4) int array of receptor atom row indices.
+    sasa_atoms : 1D row indices (into protein_snapshot.xyz) on which SASA is
+                 evaluated. None -> the whole receptor (previous behaviour).
+    """
+    if sasa_atoms is None:
+        sasa_atoms = np.arange(protein_snapshot.n_atoms)
+    else:
+        sasa_atoms = np.asarray(sasa_atoms)
+
+    radii = np.empty(protein_snapshot.n_atoms, dtype=np.float32)
+    is_nonpolar = np.ones(protein_snapshot.n_atoms, dtype=np.float32)
+    nonpolar_elements = (element.oxygen, element.nitrogen, element.sulfur)
+    for atom in protein_snapshot.topology.atoms:
+        radii[atom.index] = _ATOMIC_RADII[atom.element.symbol]
+        if atom.element in nonpolar_elements:
+            is_nonpolar[atom.index] = 0.0
+
+    areas = np.zeros(protein_snapshot.n_atoms, dtype=np.float32)
+    areas[sasa_atoms] = _sasaAreas(protein_snapshot, frame, sasa_atoms, radii=radii)
 
     nonpolar_ratio = (areas * is_nonpolar)[alpha_lining_idx].sum(axis=1).astype(float) / (
             areas[alpha_lining_idx].astype(float).sum(axis=1) + 0.00001)
@@ -192,9 +246,10 @@ def getSASA(protein_snapshot, cover_atom_coords=None,frame:int=0):
     n_sphere_points = 960
 
     if cover_atom_coords is None:
-        #print(f'protein_snapshot.xyz.shape={protein_snapshot.xyz.shape}')
-        xyz = np.array(protein_snapshot.xyz, dtype=np.float32)
-        
+        # only the requested frame is materialised (a view of the full array would
+        # otherwise be copied on every single call)
+        xyz = np.ascontiguousarray(protein_snapshot.xyz[frame:frame + 1, :, :], dtype=np.float32)
+
         atom_radii = [_ATOMIC_RADII[atom.element.symbol] for atom in protein_snapshot.topology.atoms]
     else:
         xyz = np.array(np.expand_dims(np.concatenate((protein_snapshot.xyz[0], cover_atom_coords), axis=0), axis=0),
@@ -203,6 +258,9 @@ def getSASA(protein_snapshot, cover_atom_coords=None,frame:int=0):
     #print(f'xyz.shape={xyz.shape}')
     radii = np.array(atom_radii, np.float32) + probe_radius
     #print(f'radii={radii}')
+    # xyz may already hold a single frame; make sure the frame slice stays in range
+    if xyz.shape[0] <= frame:
+        frame = 0
     atom_mapping = np.arange(xyz.shape[1], dtype=np.int32)
     atom_selection_mask = np.ones(xyz.shape[1], dtype=np.int32)
     out = np.zeros((1, xyz.shape[1]), dtype=np.float32)

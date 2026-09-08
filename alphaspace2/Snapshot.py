@@ -16,6 +16,11 @@ class Snapshot:
 
     contact_cutoff = 1.6
 
+    # spatial crop margins (Angstrom) used by _CalcCropRows to restrict the atoms
+    # that feed Delaunay/Voronoi and SASA to the region of interest
+    alpha_crop_pad = 1.0  # safety margin beyond the max alpha sphere radius (max_r)
+    sasa_crop_pad = 8.0   # shielding margin (vdW + probe) beyond the lining atoms
+
     def __init__(self,**kw):
         #New parameters
         self._filter_alphas_byloc=False
@@ -48,52 +53,80 @@ class Snapshot:
         self._pocket_alpha_index_list = None #LIST[LIST[int]]
         self._pocket_beta_index_list = None
 
-    def genAlphas(self, receptor,frame=0,rec_mask:np.ndarray=np.array([])):
+    def genAlphas(self, receptor, frame=0, rec_mask: np.ndarray = np.array([]),
+                  alpha_rows: Union[np.ndarray, None] = None,
+                  sasa_rows: Union[np.ndarray, None] = None):
         """
+        Generate alpha spheres of the current frame.
 
+        Only the atoms listed in ``alpha_rows`` are fed to the Delaunay/Voronoi
+        tessellation, which speeds up the calculation and shrinks the SASA pass when
+        a spatial crop (box or ligand region) is active. ``alpha_rows``/``sasa_rows``
+        are row indices into ``receptor.xyz`` (global atom order).
 
         Parameters
         ----------
         receptor : mdtraj.trajectory
+        alpha_rows : 1D atom row indices used for the tessellation. None -> rec_mask
+                     (falling back to every atom when rec_mask is empty).
+        sasa_rows : 1D atom row indices on which SASA is evaluated. None -> all atoms.
         """
         #print('genAlphas 1')
         self.residue_names, self.elements, self.atom_names = zip(
             *[(atom.residue.name, atom.element.symbol, atom.name) for atom in receptor.top.atoms])
         #print('genAlphas 2')
-        if rec_mask.shape[0]!=0:
-            protein_coords = receptor.xyz[frame][rec_mask] * 10.0
+        n_atoms = receptor.xyz.shape[1]
+        if alpha_rows is None:
+            if rec_mask.shape[0] != 0:
+                alpha_rows = np.asarray(rec_mask, dtype=np.intp)
+            else:
+                alpha_rows = np.arange(n_atoms, dtype=np.intp)
         else:
-            protein_coords = receptor.xyz[frame] * 10.0
-        protein_coords=protein_coords.astype(np.float32)
+            alpha_rows = np.asarray(alpha_rows, dtype=np.intp)
+
+        frame_xyz = receptor.xyz[frame]  # (n_atoms,3) nm, a view (no copy)
         #print('genAlphas 3')
-        raw_alpha_lining_idx = Delaunay(protein_coords).simplices
-        #print('genAlphas 4')
-        # Take coordinates from xyz file
-        raw_alpha_lining_xyz = np.take(protein_coords, raw_alpha_lining_idx[:, 0].flatten(), axis=0)
-        #print('genAlphas 5')
-        # generate alpha atom coordinates
-        raw_alpha_xyz = Voronoi(protein_coords).vertices
-        # Calculate alpha sphere radii
-        raw_alpha_sphere_radii = np.linalg.norm(raw_alpha_lining_xyz - raw_alpha_xyz, axis=1)
+        # gather only the atoms actually used; keep the full set as a view
+        full_set = (alpha_rows.shape[0] == n_atoms and np.array_equal(alpha_rows, np.arange(n_atoms)))
+        if full_set:
+            coords_nm = frame_xyz
+        else:
+            coords_nm = frame_xyz[alpha_rows]
+        # Delaunay/Voronoi are scale invariant, so tessellate directly in native nm
+        # coordinates and only convert the resulting points back to Angstrom.
+        try:
+            raw_alpha_lining_idx = Delaunay(coords_nm).simplices  # (n_tet,4) local ids
+            raw_alpha_xyz = Voronoi(coords_nm).vertices * 10.0
+        except Exception:
+            if not full_set:
+                # degenerate / too small cropped point set -> retry over every atom
+                alpha_rows = np.arange(n_atoms, dtype=np.intp)
+                coords_nm = frame_xyz
+                raw_alpha_lining_idx = Delaunay(coords_nm).simplices
+                raw_alpha_xyz = Voronoi(coords_nm).vertices * 10.0
+            else:
+                raise
+        raw_alpha_lining_first_xyz = coords_nm[raw_alpha_lining_idx[:, 0]] * 10.0
+        # Calculate alpha sphere radii (Angstrom)
+        raw_alpha_sphere_radii = np.linalg.norm(raw_alpha_lining_first_xyz - raw_alpha_xyz, axis=1)
         #print('genAlphas 6')
         # Filter the data based on radii cutoff
         filtered_alpha_idx = np.where(np.logical_and(self.min_r <= raw_alpha_sphere_radii,
                                                      raw_alpha_sphere_radii <= self.max_r))[0]
-        #print('genAlphas 7')
-        _alpha_radii = np.take(raw_alpha_sphere_radii, filtered_alpha_idx)
         #print('genAlphas 8')
-        _alpha_lining = np.take(raw_alpha_lining_idx, filtered_alpha_idx, axis=0)
+        _alpha_lining_local = raw_alpha_lining_idx[filtered_alpha_idx]  # (n_alpha,4) local ids
         #print('genAlphas 9')
-        alpha_lining_xyz = np.take(protein_coords, _alpha_lining, axis=0).astype(np.float32)
+        alpha_lining_xyz = coords_nm[_alpha_lining_local] * 10.0  # (n_alpha,4,3) Angstrom
         #print('genAlphas 10')
-        self._alpha_space = _getTetrahedronVolumes(alpha_lining_xyz)
+        self._alpha_space = np.asarray(_getTetrahedronVolumes(alpha_lining_xyz), dtype=np.float32)
         #print('genAlphas 11')
-        self._alpha_space_nonpolar_ratio = _getNonpolarRatio(receptor, alpha_lining_idx=_alpha_lining,frame=frame)
+        self._alpha_space_nonpolar_ratio = _getNonpolarRatio(
+            receptor, alpha_lining_idx=alpha_rows[_alpha_lining_local], frame=frame, sasa_atoms=sasa_rows)
         #print(f'self._alpha_space_nonpolar_ratio.shape={self._alpha_space_nonpolar_ratio.shape}')
         #print('genAlphas 12')
         #print(f'raw_alpha_xyz.shape={raw_alpha_xyz.shape}')
         #print(f'filtered_alpha_idx.shape={filtered_alpha_idx.shape}')
-        self._alpha_xyz = np.take(raw_alpha_xyz, filtered_alpha_idx, axis=0).astype(np.float32)
+        self._alpha_xyz = np.asarray(raw_alpha_xyz[filtered_alpha_idx], dtype=np.float32)
         #print('genAlphas 13')
 
     def genBetas(self):
@@ -188,17 +221,21 @@ class Snapshot:
 
     def run(self, receptor,frame=0,rec_mask:np.ndarray=np.array([]),lig_mask:np.ndarray=np.array([])):
         #print(f'genAlphas(receptor,frame) frame[{frame}]')
-        self.genAlphas(receptor,frame,rec_mask)
-        if  self._filter_alphas_byloc:
-            #print('filter alphas by loc...')
-            self.FilterAlphasByLoc()
+        lig_xyz=None
         if rec_mask.shape[0]!=0 and lig_mask.shape[0]!=0:
             #print('calc lig xyz')
             lig_xyz=receptor.xyz[frame][lig_mask] * 10.0
-            if not self._filter_alphas_byloc:
-                #print('filter by lig mask')
-                self.FilterAlphasByLig(lig_xyz)
             #print(lig_xyz)
+        # Determine the spatial crop rows (box or ligand neighbourhood) up front so
+        # that the expensive tessellation and SASA only see the relevant atoms.
+        alpha_rows, sasa_rows = self._CalcCropRows(receptor, frame, rec_mask, lig_xyz)
+        self.genAlphas(receptor,frame,rec_mask,alpha_rows,sasa_rows)
+        if  self._filter_alphas_byloc:
+            #print('filter alphas by loc...')
+            self.FilterAlphasByLoc()
+        if lig_xyz is not None and not self._filter_alphas_byloc:
+            #print('filter by lig mask')
+            self.FilterAlphasByLig(lig_xyz)
         #print(f'genPockets()')
         self.genPockets()
         #print(f'genBetas()')
@@ -215,6 +252,81 @@ class Snapshot:
 
             self._pocket_contact = np.array(
                 [np.any(self._alpha_contact[alpha_indices]) for alpha_indices in self._pocket_alpha_index_list])
+
+    def _CalcCropRows(self, receptor, frame, rec_mask: np.ndarray, lig_xyz):
+        """
+        Return (alpha_rows, sasa_rows): sorted 1D row indices into ``receptor.xyz``
+        that lie in the region of interest, or (None, None) when no spatial crop
+        applies (no box and no ligand).
+
+        The alpha crop is bounded by the maximum alpha sphere radius (``max_r``)
+        because every surviving alpha keeps its four lining atoms within that
+        distance; the SASA crop additionally extends by the probe/vdW shielding
+        margin (``sasa_crop_pad``) so the area values of the lining atoms are
+        unaffected by the cropped-away atoms.
+        """
+        n_atoms = receptor.xyz.shape[1]
+        if not (self.boxs or (lig_xyz is not None and lig_xyz.size != 0)):
+            return None, None
+
+        xyz = receptor.xyz[frame] * 10.0  # (n_atoms,3) Angstrom
+        x = xyz[:, 0]
+        y = xyz[:, 1]
+        z = xyz[:, 2]
+        m_alpha = self.max_r + self.alpha_crop_pad
+        m_sasa = m_alpha + self.sasa_crop_pad
+
+        if self.boxs:
+            alpha_ok = np.zeros(n_atoms, dtype=bool)
+            sasa_ok = np.zeros(n_atoms, dtype=bool)
+            for box in self.boxs:
+                b = box.reshape(-1)  # [x_min,x_max,y_min,y_max,z_min,z_max]
+                alpha_ok |= ((x > b[0] - m_alpha) & (x < b[1] + m_alpha) &
+                             (y > b[2] - m_alpha) & (y < b[3] + m_alpha) &
+                             (z > b[4] - m_alpha) & (z < b[5] + m_alpha))
+                sasa_ok |= ((x > b[0] - m_sasa) & (x < b[1] + m_sasa) &
+                            (y > b[2] - m_sasa) & (y < b[3] + m_sasa) &
+                            (z > b[4] - m_sasa) & (z < b[5] + m_sasa))
+        else:
+            # FilterAlphasByLig keeps alpha centres inside a per-ligand-atom axis
+            # box of half width lig_cutoff; a surviving alpha's lining atoms can
+            # therefore lie at most (lig_cutoff + max_r) away per axis from that
+            # ligand atom. Use the same per-atom axis-box criterion (inflated by
+            # the crop pads) so the region exactly covers every possible lining atom.
+            lig = np.asarray(lig_xyz, dtype=np.float32)  # (n_lig,3) Angstrom
+            half_a = self.lig_cutoff + m_alpha
+            half_s = half_a + self.sasa_crop_pad
+            lox = lig[:, 0] - half_a
+            hix = lig[:, 0] + half_a
+            loy = lig[:, 1] - half_a
+            hiy = lig[:, 1] + half_a
+            loz = lig[:, 2] - half_a
+            hiz = lig[:, 2] + half_a
+            cond_xa = (x[:, None] > lox[None, :]) & (x[:, None] < hix[None, :])
+            cond_ya = (y[:, None] > loy[None, :]) & (y[:, None] < hiy[None, :])
+            cond_za = (z[:, None] > loz[None, :]) & (z[:, None] < hiz[None, :])
+            alpha_ok = (cond_xa & cond_ya & cond_za).any(axis=1)
+
+            lox = lig[:, 0] - half_s
+            hix = lig[:, 0] + half_s
+            loy = lig[:, 1] - half_s
+            hiy = lig[:, 1] + half_s
+            loz = lig[:, 2] - half_s
+            hiz = lig[:, 2] + half_s
+            cond_xs = (x[:, None] > lox[None, :]) & (x[:, None] < hix[None, :])
+            cond_ys = (y[:, None] > loy[None, :]) & (y[:, None] < hiy[None, :])
+            cond_zs = (z[:, None] > loz[None, :]) & (z[:, None] < hiz[None, :])
+            sasa_ok = (cond_xs & cond_ys & cond_zs).any(axis=1)
+
+        if rec_mask.shape[0] != 0:
+            base = np.asarray(rec_mask, dtype=np.intp)
+        else:
+            base = np.arange(n_atoms, dtype=np.intp)
+        alpha_rows = np.sort(np.unique(base[alpha_ok[base]]))
+        sasa_rows = np.sort(np.nonzero(sasa_ok)[0])
+        if alpha_rows.shape[0] < 4:
+            return None, None
+        return alpha_rows, sasa_rows
 
     @property
     def pockets(self):
