@@ -18,7 +18,7 @@ tutorial version 1.2 (corresponding to AlphaTraj version 1.2.3)
 
 ## Environment
 
-AlphaTraj is a Python script that relies on Python to run. Please make sure that Python (version > 3.5) is installed on the computer or server where you intend to run the program. After installing Python, you also need to install three Python packages: scipy, mdtraj, and tqdm.
+AlphaTraj is a Python script that relies on Python to run. Please make sure that Python (version 3.9 or later) is installed on the computer or server where you intend to run the program. After installing Python, you also need to install three Python packages: scipy, mdtraj, and tqdm.
 
 <span style="color: #c8c8c8;">*Note: Anaconda is a popular Python environment management tool that provides a large number of Python packages. Using Anaconda to create and manage environments will be easier and simpler.*</span>
 
@@ -166,7 +166,7 @@ python path_to_alphaTraj_dir/pocket_analysis.py [params]
 
 Display help information.
 
-#### `-v`, `--version`:
+#### `-v,--version`:
 
 Display the software version.
 
@@ -208,7 +208,7 @@ Example: If you want to specify two boxes, where the first box is centered on at
 
 #### `--lig_cutoff`:
 
-This parameter is also a distance cutoff value. When there is a ligand in the system, alpha spheres whose distance from the ligand exceeds this cutoff value will be deleted. The default value is 3.0 Å.
+This parameter is also a distance cutoff value. When there is a ligand in the system, alpha spheres whose distance from the ligand exceeds this cutoff value will be deleted. The default value is 4.0 Å.
 
 #### `--dist_cutoff`:
 
@@ -218,7 +218,7 @@ Distance cutoff value during clustering of sub-pockets using hierarchical cluste
 
 #### `--frame_start`:
 
-Starting frame for trajectory analysis. This frame is included. Default is 1.
+Starting frame for trajectory analysis. This frame is included. Default is 0.
 
 🔴**NOTE:** Extracting frames should be done as much as possible when generating processing trajectories
 
@@ -260,11 +260,7 @@ Whether to output the best conformations of the main group. Default is false.
 
 #### `--out_coex`:[true,false]
 
-Whether to output the coexistence matrix of sub-pockets. Default is false.
-
-#### `--out_corr`:[true,false]
-
-Whether to output the correlation matrix of sub-pockets. Default is false.
+Whether to output the coexistence and correlation matrices of sub-pockets. Default is false.
 
 #### `--out_mtp`:[true,false]
 
@@ -325,7 +321,7 @@ Firstly, let's introduce several parameters unique to the control file mode:
 
 Names enclosed in \[\] are tab names. The \[GENERAL\] tab is used to set global parameters. The \[MODEL\*\] tab is used to set model parameters, where \* is a number (starting from 0, in sequential order). If mode=single, only \[MODEL0\] needs to be specified. If mode=multi, additional tabs can be specified like \[MODEL1\], \[MODEL2\], and so on.
 
-🔴**<span style="color: #ff6464">The [GENERAL] tab includes mode and align_ Mask, dist_ Cutoff, is_ Use_ Score, percentage, score_ Cut off these parameters, and the other parameters are in the \ [MODE \ * \] tab.</span>**
+🔴**<span style="color: #ff6464">The [GENERAL] tab includes mode, dist_ Cutoff, is_ Use_ Score, percentile, score_ Cutoff these parameters, and the other parameters are in the \ [MODE \ * \] tab.</span>**
 
 🔴<span style="color: #ff6464">**Tabs cannot be omitted, otherwise parameters cannot be read correctly. A control file must include the \ [GENERAL \] and \ [MODEL0 \] tabs, otherwise an error will also be reported.**</span>
 
@@ -369,7 +365,7 @@ The diagram below illustrates the box position and size.
 #### Command Line Execution
 
 ```shell
-python G:\data\pocket_analysis\example\AlphaTraj\pocket_analysis.py --top ./com_wat_strip.prmtop --traj ./traj.nc --box 2126,4357 17,26,30 --frame_start 500 --frame_stop 1000 --out ./ --out_pock_info true --out_main_best true --out_coex true --out_corr true --out_mtp true --out_group true
+python G:\data\pocket_analysis\example\AlphaTraj\pocket_analysis.py --top ./com_wat_strip.prmtop --traj ./traj.nc --box 2126,4357 17,26,30 --frame_start 500 --frame_stop 1000 --out ./ --out_pock_info true --out_main_best true --out_coex true --out_mtp true --out_group true
 ```
 
 #### Control File Execution
@@ -391,8 +387,8 @@ The parameter names and input format in the file are the same as the command lin
 # only a single model is processed. When mode=multi, execute the model comparison task
 mode=single
 
-# Distance cutoff value when clustering subpockets. The default value is 4.0
-#dist_cutoff=4.0
+# Distance cutoff value when clustering subpockets. The default value is 3.0
+#dist_cutoff=3.0
 
 # Whether to use pocket scoring function. If it is not, the pocket volume 
 # will be used to rate the pocket. The default value is True
@@ -459,7 +455,6 @@ out_best=true
 out_pock_info=true
 out_main_best=true
 out_coex=true
-out_corr=true
 out_mtp=true
 out_group=true
 
@@ -546,7 +541,6 @@ out_best=true
 out_pock_info=true
 out_main_best=true
 out_coex=true
-out_corr=true
 out_mtp=true
 out_group=true
 
@@ -590,7 +584,6 @@ out_best=true
 out_pock_info=true
 out_main_best=true
 out_coex=true
-out_corr=true
 out_mtp=true
 out_group=true
 
@@ -671,10 +664,10 @@ Pocket volume over time.
 MTP_matrix.dat: Main sub-pocket group transformation probability matrix  
 MTP_name_list.dat: This file stores the names corresponding to each column of the matrix. The first row corresponds to the first row and column of the matrix.
 
-### Pocket_coexistence rate.dat & Pocket_correlation.dat & Pocket_sync_corr_id.dat
+### Pocket_coexistence rate.dat & Pocket_correlation.dat & Pocket_coex_id.dat & Pocket_corr_id.dat
 Pocket_coexistence rate.dat: Sub-pocket coexistence matrix  
 Pocket_correlation.dat: Sub-pocket correlation matrix  
-Pocket_sync_corr_id.dat: Corresponding pocket IDs of rows and columns in the coexistence and correlation matrices. The first row corresponds to the first row and column of both matrices.
+Pocket_coex_id.dat & Pocket_corr_id.dat: Corresponding pocket IDs and ranks of rows and columns in the coexistence and correlation matrices.
 
 ### Pocket_group_v_time.dat & Pocket_group_name_list.dat
 Pocket_group_v_time.dat: Sub-pocket group changes over time (Matrix: Rows - Frames, Columns - Group Types)  
@@ -764,7 +757,6 @@ oparam={'out':'./',
         'out_pock_info':'true',
         'out_main_best':'true',
         'out_coex':'true',
-        'out_corr':'true',
         'out_mtp':'true',
         'out_group':'true'}
 
